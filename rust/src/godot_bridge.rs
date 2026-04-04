@@ -18,10 +18,13 @@ impl INode for UnitManager {
 
         let transform_buffer = TransformBuffer::new(2048);
         world.insert_resource(transform_buffer);
+        let flow_grid = FlowGrid::new(100, 100, 20.0);
+        world.insert_resource(flow_grid);
         let time = Time { delta: 0.0 };
         world.insert_resource(time);
 
         world.add_observer(spawn_units_trigger);
+        world.add_observer(move_order_trigger);
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
         for i in 0..2000 {
             world.trigger(SpawnUnitEvent {
@@ -30,13 +33,18 @@ impl INode for UnitManager {
                     rotation: 0.0,
                     scale: Vector2::new(1.0, 1.0),
                 },
-                stats: UnitStats { speed: 50.0 },
+                stats: UnitMovement {
+                    speed: 50.0,
+                    acceleration: 1.0,
+                },
             });
         }
 
         schedule.add_systems(movement_system);
         schedule.add_systems(transform_update_system);
         schedule.add_systems(despawn_units_system);
+        schedule.add_systems(update_flow_field_system);
+        schedule.add_systems(cleanup_orders_system);
 
         Self {
             world,
@@ -67,5 +75,23 @@ impl UnitManager {
 
         // 고도 엔진의 렌더링 서버에 메모리 블록 통째로 덮어쓰기
         multimesh.set_buffer(&buffer);
+    }
+
+    #[func]
+    pub fn get_unit_count(&self) -> i32 {
+        (self.world.resource::<TransformBuffer>().data.len() / 8) as i32
+    }
+
+    #[func]
+    pub fn order_move(&mut self, target: Vector2) {
+        let units = self
+            .world
+            .query_filtered::<Entity, With<Transform>>()
+            .iter(&self.world)
+            .collect::<Vec<_>>();
+        self.world.trigger(MoveOrderEvent {
+            target_position: target,
+            units,
+        });
     }
 }
