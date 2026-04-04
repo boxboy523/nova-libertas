@@ -1,0 +1,20 @@
+use bevy_ecs::prelude::*;
+use godot::prelude::*;
+
+#[derive(Component, Clone, Copy)]
+pub struct Transform {
+    pub position: Vector2,
+    pub rotation: f32,
+    pub scale: Vector2,
+}
+
+#[derive(Component)]
+pub struct TransformID(pub usize); // 유닛마다 고유한 Transform 버퍼 인덱스 (필요 시)
+
+#[derive(Component, Clone, Copy)]
+pub struct UnitStats {
+    pub speed: f32,
+}
+
+#[derive(Component)]
+pub struct Dead; // 유닛이 죽었는지 여부
