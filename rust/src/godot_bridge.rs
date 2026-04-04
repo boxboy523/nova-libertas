@@ -34,8 +34,10 @@ impl INode for UnitManager {
                     scale: Vector2::new(1.0, 1.0),
                 },
                 stats: UnitMovement {
-                    speed: 50.0,
-                    acceleration: 1.0,
+                    speed: 0.0,
+                    max_speed: 100.0,
+                    acceleration: 20.0,
+                    moving: false,
                 },
             });
         }
@@ -44,7 +46,6 @@ impl INode for UnitManager {
         schedule.add_systems(transform_update_system);
         schedule.add_systems(despawn_units_system);
         schedule.add_systems(update_flow_field_system);
-        schedule.add_systems(cleanup_orders_system);
 
         Self {
             world,

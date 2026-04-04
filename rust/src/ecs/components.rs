@@ -14,18 +14,18 @@ pub struct TransformID(pub usize); // 유닛마다 고유한 Transform 버퍼 �
 #[derive(Component, Clone, Copy)]
 pub struct UnitMovement {
     pub speed: f32,
+    pub max_speed: f32,
     pub acceleration: f32,
+    pub moving: bool,
 }
 
 #[derive(Component)]
 pub struct Dead; // 유닛이 죽었는지 여부
 
 #[derive(Component)]
-pub struct FollowingOrder(pub Entity);
-
-#[derive(Component)]
 pub struct MoveOrder {
     pub target: Vector2,
+    pub followers: Vec<Entity>, // 이 명령을 따르는 유닛들
 }
 
 #[derive(Component)]

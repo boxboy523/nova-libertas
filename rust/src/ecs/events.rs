@@ -28,15 +28,11 @@ pub struct MoveOrderEvent {
 }
 
 pub fn move_order_trigger(event: On<MoveOrderEvent>, mut commands: Commands) {
-    let order = commands
-        .spawn((
-            MoveOrder {
-                target: event.target_position,
-            },
-            FlowField { field: Vec::new() },
-        ))
-        .id();
-    for unit in event.units.iter() {
-        commands.entity(*unit).insert(FollowingOrder(order));
-    }
+    commands.spawn((
+        MoveOrder {
+            target: event.target_position,
+            followers: event.units.clone(),
+        },
+        FlowField { field: Vec::new() },
+    ));
 }
