@@ -6,6 +6,7 @@ pub struct Transform {
     pub position: Vector2,
     pub rotation: f32,
     pub scale: Vector2,
+    pub size: f32, // 유닛의 크기 (반지름)
 }
 
 #[derive(Component)]
@@ -16,6 +17,7 @@ pub struct UnitMovement {
     pub speed: f32,
     pub max_speed: f32,
     pub acceleration: f32,
+    pub dir_vec: Vector2, // 현재 이동 방향 벡터
     pub moving: bool,
 }
 

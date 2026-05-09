@@ -2,6 +2,9 @@ use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
 use godot::{classes::MultiMesh, prelude::*};
 
+const MAP_WIDTH: f32 = 1000.0;
+const MAP_HEIGHT: f32 = 1000.0;
+
 #[derive(GodotClass)]
 #[class(base=Node)]
 pub struct UnitManager {
@@ -18,34 +21,42 @@ impl INode for UnitManager {
 
         let transform_buffer = TransformBuffer::new(2048);
         world.insert_resource(transform_buffer);
-        let flow_grid = FlowGrid::new(100, 100, 20.0);
+        let flow_grid = FlowGrid::new(MAP_WIDTH, MAP_HEIGHT, 20.0);
         world.insert_resource(flow_grid);
+        let spatial_grid = SpatialGrid::new(MAP_WIDTH, MAP_HEIGHT, 20.0);
+        world.insert_resource(spatial_grid);
         let time = Time { delta: 0.0 };
         world.insert_resource(time);
 
         world.add_observer(spawn_units_trigger);
         world.add_observer(move_order_trigger);
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
-        for i in 0..2000 {
+        for i in 0..100 {
             world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position: Vector2::new((i % 50) as f32 * 20.0, (i / 50) as f32 * 20.0),
                     rotation: 0.0,
                     scale: Vector2::new(1.0, 1.0),
+                    size: 10.0,
                 },
                 stats: UnitMovement {
                     speed: 0.0,
                     max_speed: 100.0,
                     acceleration: 20.0,
                     moving: false,
+                    dir_vec: Vector2::ZERO,
                 },
             });
         }
 
-        schedule.add_systems(movement_system);
+        schedule.add_systems(apply_move_system);
+        schedule.add_systems(flow_movement_system);
+        schedule.add_systems(seperation_force_system);
         schedule.add_systems(transform_update_system);
         schedule.add_systems(despawn_units_system);
         schedule.add_systems(update_flow_field_system);
+        schedule.add_systems(update_spatial_grid_system);
+        schedule.add_systems(acceleration_system);
 
         Self {
             world,

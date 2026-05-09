@@ -10,9 +10,12 @@ pub mod prelude {
     pub use crate::ecs::events::{
         move_order_trigger, spawn_units_trigger, MoveOrderEvent, SpawnUnitEvent,
     };
-    pub use crate::ecs::resources::{FlowGrid, Time, TransformBuffer};
+    pub use crate::ecs::resources::{FlowGrid, SpatialGrid, Time, TransformBuffer};
     pub use crate::ecs::systems::{
         framework::{despawn_units_system, transform_update_system},
-        movement::{movement_system, update_flow_field_system},
+        movement::{
+            acceleration_system, apply_move_system, flow_movement_system, seperation_force_system,
+            update_flow_field_system, update_spatial_grid_system,
+        },
     };
 }

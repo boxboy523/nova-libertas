@@ -52,10 +52,10 @@ pub struct FlowGrid {
 }
 
 impl FlowGrid {
-    pub fn new(width: usize, height: usize, cell_size: f32) -> Self {
+    pub fn new(map_width: f32, map_height: f32, cell_size: f32) -> Self {
         Self {
-            width,
-            height,
+            width: (map_width / cell_size).ceil() as usize,
+            height: (map_height / cell_size).ceil() as usize,
             cell_size,
         }
     }
@@ -73,8 +73,9 @@ impl FlowGrid {
         )
     }
 
-    pub fn vector_from_flow_field(&self, flow_field: &FlowField, position: Vector2) -> Vector2 {
-        let (grid_pos_x, grid_pos_y) = self.world_to_grid(position);
+    pub fn sample_flow_field(&self, flow_field: &FlowField, position: Vector2) -> Vector2 {
+        let gx = position.x / self.cell_size;
+        let gy = position.y / self.cell_size;
         let index = (grid_pos_y as usize * self.width + grid_pos_x as usize) as usize;
         if index < flow_field.field.len() {
             flow_field.field[index]
@@ -94,5 +95,63 @@ impl FlowGrid {
             }
         }
         field
+    }
+}
+
+#[derive(Resource)]
+pub struct SpatialGrid {
+    cell_size: f32,
+    width: usize,
+    height: usize,
+    cells: Vec<Vec<Entity>>,
+}
+
+impl SpatialGrid {
+    pub fn new(map_width: f32, map_height: f32, cell_size: f32) -> Self {
+        let width = (map_width / cell_size).ceil() as usize;
+        let height = (map_height / cell_size).ceil() as usize;
+        let cells = vec![Vec::with_capacity(10); width * height];
+        Self {
+            cell_size,
+            width,
+            height,
+            cells,
+        }
+    }
+
+    pub fn world_to_grid(&self, position: Vector2) -> (usize, usize) {
+        let x = (position.x / self.cell_size).floor() as usize;
+        let y = (position.y / self.cell_size).floor() as usize;
+        (x.min(self.width - 1), y.min(self.height - 1)) // 그리드 범위 내로 제한
+    }
+
+    pub fn add_entity(&mut self, entity: Entity, position: Vector2) {
+        let (grid_x, grid_y) = self.world_to_grid(position);
+        let idx = grid_y * self.width + grid_x;
+        if idx < self.cells.len() {
+            self.cells[idx].push(entity);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for cell in &mut self.cells {
+            cell.clear();
+        }
+    }
+
+    pub fn query_entities(&self, position: Vector2, radius: f32) -> Vec<Entity> {
+        let mut result = Vec::new();
+        let (grid_x, grid_y) = self.world_to_grid(position);
+        let radius_in_cells = (radius / self.cell_size).ceil() as isize;
+
+        for y in (grid_y as isize - radius_in_cells)..=(grid_y as isize + radius_in_cells) {
+            for x in (grid_x as isize - radius_in_cells)..=(grid_x as isize + radius_in_cells) {
+                if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
+                    let idx = (y as usize) * self.width + (x as usize);
+                    result.extend(&self.cells[idx]);
+                }
+            }
+        }
+        result
     }
 }
