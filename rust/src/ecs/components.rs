@@ -17,8 +17,9 @@ pub struct UnitMovement {
     pub speed: f32,
     pub max_speed: f32,
     pub acceleration: f32,
-    pub dir_vec: Vector2, // 현재 이동 방향 벡터
+    pub dir_vec: Vector2,
     pub moving: bool,
+    pub seperation_force: Vector2,
 }
 
 #[derive(Component)]
@@ -32,5 +33,17 @@ pub struct MoveOrder {
 
 #[derive(Component)]
 pub struct FlowField {
-    pub field: Vec<Vector2>,
+    pub field: Vec<Option<Vector2>>,
+}
+
+#[derive(Component)]
+struct Delayed {
+    timer: f32,
+    action: DelayedAction,
+}
+
+#[derive(Component)]
+enum DelayedAction {
+    Despawn,
+    Movement(Vector2),
 }

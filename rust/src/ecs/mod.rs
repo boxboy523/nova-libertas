@@ -8,9 +8,12 @@ pub mod prelude {
         Dead, FlowField, MoveOrder, Transform, TransformID, UnitMovement,
     };
     pub use crate::ecs::events::{
-        move_order_trigger, spawn_units_trigger, MoveOrderEvent, SpawnUnitEvent,
+        move_order_trigger, spawn_units_trigger, spawn_wall_trigger, MoveOrderEvent,
+        SpawnUnitEvent, SpawnWallEvent,
     };
-    pub use crate::ecs::resources::{FlowGrid, SpatialGrid, Time, TransformBuffer};
+    pub use crate::ecs::resources::{
+        FlowGrid, SpatialGrid, ThingType, Time, TransformBuffer, CHUNK_SIZE,
+    };
     pub use crate::ecs::systems::{
         framework::{despawn_units_system, transform_update_system},
         movement::{

@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://ckygxhtrikp7t"
+
+[deps]
+
+files=["res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation"]
+
+source_file="res://res/map.csv"
+dest_files=["res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation", "res://res/map.1.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

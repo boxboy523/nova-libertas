@@ -1,23 +1,25 @@
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
+use godot::global::godot_print;
 
 pub fn transform_update_system(
-    query: Query<(&Transform, &TransformID)>,
+    mut query: Query<(&Transform, &TransformID), Changed<Transform>>,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    let data = &mut buffer.data;
-    query.iter().for_each(|(transform, id)| {
+    query.iter_mut().for_each(|(transform, id)| {
         let (sin, cos) = transform.rotation.sin_cos();
-        let i = id.0 * 8; // TransformID를 인덱스로 사용
+        let i = id.0 * 8;
+        let chunk_index = id.0 / CHUNK_SIZE;
+        buffer.chunks[chunk_index].modified = true;
 
-        data[i] = cos * transform.scale.x; // x.x
-        data[i + 1] = sin * transform.scale.y; // y.x
-        data[i + 2] = 0.0; // padding
-        data[i + 3] = transform.position.x; // x.w (translation x)
-        data[i + 4] = sin * transform.scale.x; // x.y
-        data[i + 5] = -cos * transform.scale.y; // y.y
-        data[i + 6] = 0.0; // padding
-        data[i + 7] = transform.position.y; // y.w (translation y)
+        buffer.data[i] = cos * transform.scale.x; // x.x
+        buffer.data[i + 1] = sin * transform.scale.y; // y.x
+        buffer.data[i + 2] = 0.0; // padding
+        buffer.data[i + 3] = transform.position.x; // x.w (translation x)
+        buffer.data[i + 4] = sin * transform.scale.x; // x.y
+        buffer.data[i + 5] = -cos * transform.scale.y; // y.y
+        buffer.data[i + 6] = 0.0; // padding
+        buffer.data[i + 7] = transform.position.y; // y.w (translation y)
     });
 }
 
@@ -28,6 +30,6 @@ pub fn despawn_units_system(
 ) {
     for (entity, id) in query.iter() {
         commands.entity(entity).despawn();
-        buffer.free(id.0); // 유닛이 죽으면 TransformID 인덱스 해제
+        buffer.free(id.0);
     }
 }

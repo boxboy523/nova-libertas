@@ -3,15 +3,42 @@ use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
 const ORDER_MARGIN: f32 = 5.0; // 유닛이 목표 지점에 도달했다고 간주하는 거리
+const SEP_WEIGHT: f32 = 1.0; // 분리 힘의 가중치
+const MAX_SEP_FORCE: f32 = 50.0; // 최대 분리 힘
+const SEP_DIST: f32 = 20.0; // 유닛 간 최소 거리
+const SEP_BOOST: f32 = 1.5; // 분리 힘이 최대일 때 속도에 곱해지는 보정값
+const SEARCH_RADIUS: f32 = 50.0; // 주변 유닛 탐색 반경
 
 // 유닛 이동 시스템: UnitMovement 컴포넌트를 가진 엔티티를 이동시키는 시스템
-pub fn apply_move_system(mut query: Query<(&mut Transform, &mut UnitMovement)>, time: Res<Time>) {
+pub fn apply_move_system(
+    mut query: Query<(&mut Transform, &mut UnitMovement)>,
+    time: Res<Time>,
+    spatial_grid: Res<SpatialGrid>,
+) {
     let delta = time.delta;
-    query.par_iter_mut().for_each(|(mut transform, movement)| {
-        if movement.moving {
-            transform.position += movement.dir_vec * movement.speed * delta;
-        }
-    });
+    query
+        .par_iter_mut()
+        .for_each(|(mut transform, mut movement)| {
+            if movement.speed == 0.0 && movement.seperation_force == Vector2::ZERO {
+                return; // 이동할 필요가 없으면 건너뜀
+            }
+            let direction = if movement.moving {
+                (movement.dir_vec + movement.seperation_force * SEP_WEIGHT).normalized_or_zero()
+            } else {
+                movement.seperation_force.normalized_or_zero()
+            };
+            let speed = if movement.moving {
+                ((movement.speed / movement.max_speed
+                    + (movement.seperation_force.length() / MAX_SEP_FORCE).min(1.0))
+                    * movement.max_speed)
+                    .min(movement.max_speed * SEP_BOOST) // 최대 속도보다 약간 빠르게 허용
+            } else {
+                (movement.seperation_force.length() / MAX_SEP_FORCE).min(1.0) * movement.max_speed
+            };
+            let mut to_move = direction * speed * delta;
+
+            movement.seperation_force = Vector2::ZERO; // 분리 힘 초기화
+        });
 }
 
 // 명령 처리 시스템: 명령을 받은 유닛들을 FlowField를 따라 방향을 업데이트하는 시스템
@@ -30,8 +57,18 @@ pub fn flow_movement_system(
                 .iter()
                 .filter(|&unit_entity| {
                     if let Ok((mut movement, transform)) = query.get_mut(*unit_entity) {
-                        movement.dir_vec =
-                            flow_grid.vector_from_flow_field(flow_field, transform.position);
+                        movement.dir_vec = if let Some(dir) =
+                            flow_grid.sample_flow_field(flow_field, transform.position)
+                        {
+                            if dir == Vector2::ZERO {
+                                // it means unit is on target grid cell
+                                (order.target - transform.position).normalized_or_zero()
+                            } else {
+                                dir
+                            }
+                        } else {
+                            Vector2::ZERO
+                        };
                         movement.moving = true;
                         if transform.position.distance_squared_to(order.target) < margin_squared {
                             movement.moving = false; // 목표 지점에 도달하면 이동 중지
@@ -48,32 +85,40 @@ pub fn flow_movement_system(
         });
 }
 
-const DAMPING: f32 = 0.3;
-
 // 유닛 간 분리 시스템: 유닛들이 서로 겹치지 않도록 하는 시스템 (간단한 충돌 회피)
 pub fn seperation_force_system(
-    mut query: Query<(Entity, &mut Transform)>,
+    mut query: Query<(Entity, &Transform, &mut UnitMovement)>,
     spatial_grid: Res<SpatialGrid>,
 ) {
     let to_move = query
         .iter()
-        .filter_map(|(e, transform)| {
-            let nearby_entities = spatial_grid.query_entities(transform.position, 40.0); // 일정 반경 내의 엔티티 조회
+        .filter_map(|(e, transform, _)| {
+            let nearby_entities = spatial_grid.query_entities(
+                transform.position,
+                transform.size + SEP_DIST + SEARCH_RADIUS,
+            ); // 일정 반경 내의 엔티티 조회
+            let mut total_force = Vector2::ZERO;
             for other_entity in nearby_entities {
-                if let Ok((_, other_transform)) = query.get(other_entity) {
+                if let Ok((_, other_transform, _)) = query.get(other_entity) {
                     let to_other = transform.position - other_transform.position;
-                    let distance_squared = to_other.length_squared();
-                    if distance_squared < (transform.size + other_transform.size).powi(2) {
-                        return Some((e, to_other * DAMPING)); // 가까운 만큼 반발격 적용
+                    let distance = to_other.length();
+                    if distance < (transform.size + other_transform.size + SEP_DIST) {
+                        let overlap = (transform.size + other_transform.size + SEP_DIST) - distance;
+                        let force = to_other.normalized_or_zero() * overlap;
+                        total_force += force;
                     }
                 }
             }
-            None
+            if total_force != Vector2::ZERO {
+                Some((e, total_force))
+            } else {
+                None
+            }
         })
         .collect::<Vec<_>>();
     for (entity, force) in to_move {
-        if let Ok((_, mut transform)) = query.get_mut(entity) {
-            transform.position += force; // 분리 힘 적용
+        if let Ok((_, _, mut unit_movement)) = query.get_mut(entity) {
+            unit_movement.seperation_force += force
         }
     }
 }
@@ -83,12 +128,14 @@ pub fn update_flow_field_system(
     grid: Res<FlowGrid>,
 ) {
     query.par_iter_mut().for_each(|(mut flow_field, order)| {
-        flow_field.field = grid.gen_flow_field(order.target);
+        flow_field.field = grid
+            .gen_flow_field(order.target)
+            .unwrap_or_else(|_| vec![None; grid.width * grid.height]);
     });
 }
 
 pub fn update_spatial_grid_system(
-    object: Query<(Entity, &Transform)>,
+    object: Query<(Entity, &Transform), With<UnitMovement>>,
     mut grid: ResMut<SpatialGrid>,
 ) {
     grid.clear();
