@@ -12,7 +12,9 @@ pub mod prelude {
         SpawnUnitEvent, SpawnWallEvent,
     };
     pub use crate::ecs::resources::{
-        FlowGrid, SpatialGrid, ThingType, Time, TransformBuffer, CHUNK_SIZE,
+        flow_grid::FlowGrid, spatial_grid::Ray, spatial_grid::RaycastResult,
+        spatial_grid::SpatialGrid, transform_buffer::ThingType, transform_buffer::TransformBuffer,
+        transform_buffer::CHUNK_SIZE, Time,
     };
     pub use crate::ecs::systems::{
         framework::{despawn_units_system, transform_update_system},

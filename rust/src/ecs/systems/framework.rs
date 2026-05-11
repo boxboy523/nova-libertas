@@ -1,6 +1,6 @@
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
-use godot::global::godot_print;
+use godot::prelude::*;
 
 pub fn transform_update_system(
     mut query: Query<(&Transform, &TransformID), Changed<Transform>>,

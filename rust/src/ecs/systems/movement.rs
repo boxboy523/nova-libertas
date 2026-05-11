@@ -11,14 +11,14 @@ const SEARCH_RADIUS: f32 = 50.0; // 주변 유닛 탐색 반경
 
 // 유닛 이동 시스템: UnitMovement 컴포넌트를 가진 엔티티를 이동시키는 시스템
 pub fn apply_move_system(
-    mut query: Query<(&mut Transform, &mut UnitMovement)>,
+    mut query: Query<(Entity, &mut Transform, &mut UnitMovement)>,
     time: Res<Time>,
     spatial_grid: Res<SpatialGrid>,
 ) {
     let delta = time.delta;
     query
         .par_iter_mut()
-        .for_each(|(mut transform, mut movement)| {
+        .for_each(|(entity, mut transform, mut movement)| {
             if movement.speed == 0.0 && movement.seperation_force == Vector2::ZERO {
                 return; // 이동할 필요가 없으면 건너뜀
             }
@@ -35,9 +35,52 @@ pub fn apply_move_system(
             } else {
                 (movement.seperation_force.length() / MAX_SEP_FORCE).min(1.0) * movement.max_speed
             };
-            let mut to_move = direction * speed * delta;
+            let ray = Ray {
+                origin: transform.position,
+                direction,
+                length: speed * delta + transform.size + 0.5, // 여유 있게 레이캐스트
+            };
+            movement.seperation_force = Vector2::ZERO;
+            
+            // 1. 벽 내부에 박혔는지 확인하고 우선 탈출
+            let push_out = spatial_grid.get_push_out_vector(transform.position);
+            if push_out != Vector2::ZERO {
+                transform.position += push_out * speed * delta * 2.0; 
+                return;
+            }
 
-            movement.seperation_force = Vector2::ZERO; // 분리 힘 초기화
+            match spatial_grid.raycast(&ray, Some(&[entity])) {
+                RaycastResult::HitWall(v, n) => {
+                    if n == Vector2::ZERO { return; }
+                    
+                    let dot = direction.dot(n);
+                    let slide_dir = (direction - n * dot).normalized_or_zero();
+                    
+                    // 벽까지의 거리 계산
+                    let dist_to_wall = (v - transform.position).length();
+                    let safe_move_dist = (dist_to_wall - transform.size).max(0.0);
+                    
+                    // 2. 벽 앞까지 안전하게 이동 (안전 계수 0.8 적용)
+                    transform.position += direction * safe_move_dist * 0.8;
+                    
+                    // 3. 남은 속도로 슬라이딩
+                    if slide_dir != Vector2::ZERO {
+                        let slide_speed = speed * (1.0 - dot.abs().min(1.0));
+                        transform.position += slide_dir * slide_speed * delta;
+                    }
+                }
+                RaycastResult::OutOfBounds => {
+                    return;
+                }
+                RaycastResult::HitEntity(v, _) => {
+                    let dist_to_ent = (v - transform.position).length();
+                    let safe_move_dist = (dist_to_ent - transform.size).max(0.0);
+                    transform.position += direction * safe_move_dist * 0.8;
+                }
+                RaycastResult::Miss => {
+                    transform.position += direction * speed * delta;
+                }
+            };
         });
 }
 
@@ -93,13 +136,15 @@ pub fn seperation_force_system(
     let to_move = query
         .iter()
         .filter_map(|(e, transform, _)| {
-            let nearby_entities = spatial_grid.query_entities(
-                transform.position,
-                transform.size + SEP_DIST + SEARCH_RADIUS,
-            ); // 일정 반경 내의 엔티티 조회
+            let nearby_entities = spatial_grid
+                .query_entities(
+                    transform.position,
+                    transform.size + SEP_DIST + SEARCH_RADIUS,
+                )
+                .unwrap_or(Vec::new());
             let mut total_force = Vector2::ZERO;
             for other_entity in nearby_entities {
-                if let Ok((_, other_transform, _)) = query.get(other_entity) {
+                if let Ok((_, other_transform, _)) = query.get(other_entity.entity) {
                     let to_other = transform.position - other_transform.position;
                     let distance = to_other.length();
                     if distance < (transform.size + other_transform.size + SEP_DIST) {
@@ -140,7 +185,8 @@ pub fn update_spatial_grid_system(
 ) {
     grid.clear();
     object.iter().for_each(|(entity, transform)| {
-        grid.add_entity(entity, transform.position);
+        grid.add_entity(entity, transform.position, transform.size)
+            .ok();
     });
 }
 

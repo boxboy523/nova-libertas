@@ -61,12 +61,12 @@ impl INode for UnitManager {
         }
 
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
-        for i in 0..10 {
+        for i in 0..1 {
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position: Vector2::new(
-                        (i % 50) as f32 * 40.0 + 40.0,
-                        (i / 50) as f32 * 40.0 + 40.0,
+                        (i % 50) as f32 * 40.0 + 50.0,
+                        (i / 50) as f32 * 40.0 + 50.0,
                     ),
                     rotation: 0.0,
                     scale: Vector2::new(1.0, 1.0),
@@ -95,7 +95,6 @@ impl INode for UnitManager {
     }
 
     fn physics_process(&mut self, delta: f64) {
-        // Rust ECS 내부 시뮬레이션 틱 진행
         self.world.resource_mut::<Time>().delta = delta as f32;
         self.schedule.run(&mut self.world);
     }
@@ -135,7 +134,7 @@ impl UnitManager {
             multimesh.set_instance_count((buffer_len / 8) as i32);
         }
 
-        godot_print!("Buffer length for {:?}: {}", t_type, buffer_len / 8);
+        //godot_print!("Buffer length for {:?}: {}", t_type, buffer_len / 8);
 
         let buffer = PackedFloat32Array::from(buffer[..buffer_len].as_ref());
 
