@@ -79,6 +79,7 @@
 
           # 그래픽스 및 윈도우 시스템 (Vulkan, Wayland/X11)
           vulkan-loader
+          vulkan-validation-layers
           libxkbcommon
           wayland
           libx11
@@ -98,6 +99,8 @@
           nativeBuildInputs = [ rustToolchain ];
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          VK_LAYER_PATH = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
+          VK_ICD_FILENAMES = "/run/opengl-driver/share/vulkan/icd.d/radeon_icd.x86_64.json";
 
           shellHook = ''
             echo "Godot + Rust DevShell Activated!"

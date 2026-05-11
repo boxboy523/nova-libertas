@@ -227,12 +227,25 @@ impl FlowGrid {
     }
 }
 
+pub struct Ray {
+    pub origin: Vector2,
+    pub direction: Vector2,
+    pub length: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityInfo {
+    pub entity: Entity,
+    pub radius: f32,
+    pub pos: Vector2,
+}
+
 #[derive(Resource)]
 pub struct SpatialGrid {
     cell_size: f32,
     width: usize,
     height: usize,
-    cells: Vec<Option<Vec<Entity>>>, // None Means it is Wall Cell
+    cells: Vec<Option<Vec<EntityInfo>>>, // None Means it is Wall Cell
 }
 
 impl SpatialGrid {
@@ -259,34 +272,67 @@ impl SpatialGrid {
         (x.min(self.width - 1), y.min(self.height - 1)) // 그리드 범위 내로 제한
     }
 
-    pub fn is_wall_collision(&self, pos: Vector2, size: (f32, f32)) -> usize {
-        // 0: no collision, 1: x-collision, 2: y-collision, 3: both
-        let mut collision = 0;
-        let (grid_x, grid_y) = self.world_to_grid(pos);
-        let (grid_x2, grid_y2) = self.world_to_grid(pos + Vector2::new(size.0, size.1));
-        for y in grid_y..=grid_y2 {
-            for x in grid_x..=grid_x2 {
-                if x < self.width && y < self.height {
-                    if self.cells[y * self.width + x].is_none() {
-                        if x == grid_x {
-                            collision |= 1; // x-collision
-                        }
-                        if y == grid_y {
-                            collision |= 2; // y-collision
-                        }
-                    }
-                }
-            }
-        }
-        collision
+    pub fn worldpos_to_gridpos(&self, position: Vector2) -> Vector2 {
+        let (gx, gy) = self.world_to_grid(position);
+        return position
+            - Vector2 {
+                x: gx as f32 * self.cell_size,
+                y: gy as f32 * self.cell_size,
+            };
     }
 
-    pub fn add_entity(&mut self, entity: Entity, position: Vector2) {
+    pub fn get_entities_at(&self, position: Vector2) -> Option<Vec<EntityInfo>> {
         let (grid_x, grid_y) = self.world_to_grid(position);
+        if grid_x >= self.width || grid_y >= self.height {
+            return None; // 그리드 범위를 벗어남
+        }
+        if let Some(entity_vec) = &self.cells[grid_y * self.width + grid_x] {
+            let mut rtn = Vec::new();
+            for e in entity_vec {
+                if (position - e.pos).length_squared() < e.radius.powi(2) {
+                    rtn.push(e.clone());
+                }
+            }
+            if rtn.len() > 0 {
+                return Some(rtn);
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+
+    pub fn raycast(&self, ray: &Ray) -> Option<(Vector2, Option<EntityInfo>)> {
+        let (mut grid_x, mut grid_y) = self.world_to_grid(ray.origin);
+        let step_x = if ray.direction.x > 0.0 { 1 } else { 0 };
+        let step_y = if ray.direction.y > 0.0 { 1 } else { 0 };
+
+        let mut t_last = 0.0;
+        let mut t_current = 0.0;
+        let ray_offset = self.worldpos_to_gridpos(ray.origin + t_last * ray.direction);
+        let t_delta = Vector2 {
+            x: (self.cell_size - ray_offset.x) / ray.direction.x,
+            y: (self.cell_size - ray_offset.y) / ray.direction.y,
+        };
+        t_current += if t_delta.x > t_delta.y {
+            t_delta.y
+        } else {
+            t_delta.x
+        };
+        for e in self.cells[self.width * grid_y + grid_x] {}
+    }
+
+    pub fn add_entity(&mut self, entity: Entity, pos: Vector2, radius: f32) {
+        let (grid_x, grid_y) = self.world_to_grid(pos);
         let idx = grid_y * self.width + grid_x;
         if idx < self.cells.len() {
             if let Some(cell) = &mut self.cells[idx] {
-                cell.push(entity);
+                cell.push(EntityInfo {
+                    entity,
+                    radius,
+                    pos,
+                });
             }
         }
     }
@@ -299,7 +345,7 @@ impl SpatialGrid {
         }
     }
 
-    pub fn query_entities(&self, position: Vector2, radius: f32) -> Vec<Entity> {
+    pub fn query_entities(&self, position: Vector2, radius: f32) -> Vec<EntityInfo> {
         let mut result = Vec::new();
         let (grid_x, grid_y) = self.world_to_grid(position);
         let radius_in_cells = (radius / self.cell_size).ceil() as isize;
@@ -315,5 +361,39 @@ impl SpatialGrid {
             }
         }
         result
+    }
+}
+
+fn circle_line_overlap(
+    radius: f32,
+    center: Vector2,
+    line_start: Vector2,
+    line_end: Vector2,
+) -> Option<f32> {
+    let delta = line_start - line_end;
+    let sigma = 0.00001;
+    let a = delta.length_squared();
+    if a < sigma {
+        return None;
+    }
+    let to_center = line_end - center;
+    let b_half = to_center.x * delta.x + to_center.y * delta.y;
+    let c = to_center.length_squared() - radius.powi(2);
+    let det = b_half.powi(2) - a * c;
+    if det < 0.0 {
+        return None;
+    }
+    let t1 = (-b_half + det.sqrt()) / a;
+    let t2 = (-b_half - det.sqrt()) / a;
+    let t1_valid = t1 >= 0.0 && t1 <= 1.0;
+    let t2_valid = t2 >= 0.0 && t2 <= 1.0;
+    if t1_valid && t2_valid {
+        return Some(t1.min(t2));
+    } else if t1_valid {
+        return Some(t1);
+    } else if t2_valid {
+        return Some(t2);
+    } else {
+        return None;
     }
 }
