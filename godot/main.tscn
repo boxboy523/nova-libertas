@@ -4,8 +4,8 @@
 [ext_resource type="Texture2D" uid="uid://b2ka4u17n5u1x" path="res://icon.svg" id="2_0xm2m"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_1bvp3"]
-size = Vector2(32, 32)
-center_offset = Vector3(16, 16, 0)
+size = Vector2(40, 40)
+center_offset = Vector3(30, -10, 0)
 
 [sub_resource type="MultiMesh" id="MultiMesh_0xm2m"]
 instance_count = 2000
@@ -20,7 +20,6 @@ gradient = SubResource("Gradient_0xm2m")
 
 [sub_resource type="QuadMesh" id="QuadMesh_0xm2m"]
 size = Vector2(32, 32)
-center_offset = Vector3(16, 16, 0)
 
 [sub_resource type="MultiMesh" id="MultiMesh_h2yge"]
 instance_count = 2000

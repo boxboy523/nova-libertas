@@ -2,7 +2,7 @@ use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
-const ORDER_MARGIN: f32 = 5.0; // 유닛이 목표 지점에 도달했다고 간주하는 거리
+const ORDER_MARGIN: f32 = 10.0; // 유닛이 목표 지점에 도달했다고 간주하는 거리
 const SEP_WEIGHT: f32 = 1.0; // 분리 힘의 가중치
 const MAX_SEP_FORCE: f32 = 50.0; // 최대 분리 힘
 const SEP_DIST: f32 = 20.0; // 유닛 간 최소 거리
@@ -19,7 +19,7 @@ pub fn apply_move_system(
     query
         .par_iter_mut()
         .for_each(|(entity, mut transform, mut movement)| {
-            if movement.speed == 0.0 && movement.seperation_force == Vector2::ZERO {
+            if movement.speed < f32::EPSILON && movement.seperation_force == Vector2::ZERO {
                 return; // 이동할 필요가 없으면 건너뜀
             }
             let direction = if movement.moving {
@@ -33,52 +33,59 @@ pub fn apply_move_system(
                     * movement.max_speed)
                     .min(movement.max_speed * SEP_BOOST) // 최대 속도보다 약간 빠르게 허용
             } else {
-                (movement.seperation_force.length() / MAX_SEP_FORCE).min(1.0) * movement.max_speed
+                (movement.seperation_force.length() / MAX_SEP_FORCE * 10.0).min(1.0)
+                    * movement.max_speed
             };
-            let ray = Ray {
-                origin: transform.position,
+            godot_print!(
+                "direction: {:?}, speed: {}, seperation_force: {:?}, delta: {}",
                 direction,
-                length: speed * delta + transform.size + 0.5, // 여유 있게 레이캐스트
-            };
+                speed,
+                movement.seperation_force,
+                delta
+            );
             movement.seperation_force = Vector2::ZERO;
-            
-            // 1. 벽 내부에 박혔는지 확인하고 우선 탈출
-            let push_out = spatial_grid.get_push_out_vector(transform.position);
-            if push_out != Vector2::ZERO {
-                transform.position += push_out * speed * delta * 2.0; 
-                return;
-            }
-
-            match spatial_grid.raycast(&ray, Some(&[entity])) {
-                RaycastResult::HitWall(v, n) => {
-                    if n == Vector2::ZERO { return; }
-                    
-                    let dot = direction.dot(n);
-                    let slide_dir = (direction - n * dot).normalized_or_zero();
-                    
-                    // 벽까지의 거리 계산
-                    let dist_to_wall = (v - transform.position).length();
-                    let safe_move_dist = (dist_to_wall - transform.size).max(0.0);
-                    
-                    // 2. 벽 앞까지 안전하게 이동 (안전 계수 0.8 적용)
-                    transform.position += direction * safe_move_dist * 0.8;
-                    
-                    // 3. 남은 속도로 슬라이딩
-                    if slide_dir != Vector2::ZERO {
-                        let slide_speed = speed * (1.0 - dot.abs().min(1.0));
-                        transform.position += slide_dir * slide_speed * delta;
+            let next_pos = transform.position + direction * speed * delta;
+            let col_pos = transform.position + direction * (0.1 + speed * delta);
+            let sign_x = direction.x.signum();
+            let sign_y = direction.y.signum();
+            let move_x = transform.position + Vector2::new(sign_x * speed * delta, 0.0);
+            let move_y = transform.position + Vector2::new(0.0, speed * delta * sign_y);
+            let col_x = transform.position + Vector2::new(sign_x * (0.1 + speed * delta), 0.0);
+            let col_y = transform.position + Vector2::new(0.0, sign_y * (0.1 + speed * delta));
+            let x_free = spatial_grid.collision_check(col_x, transform.size, Some(&[entity]))
+                == CollisionResult::NoCollision;
+            let y_free = spatial_grid.collision_check(col_y, transform.size, Some(&[entity]))
+                == CollisionResult::NoCollision;
+            godot_print!("x_free: {}, y_free: {}", x_free, y_free);
+            godot_print!(
+                "collision check result: {:?}",
+                spatial_grid.collision_check(next_pos, transform.size, Some(&[entity]))
+            );
+            match spatial_grid.collision_check(col_pos, transform.size, Some(&[entity])) {
+                CollisionResult::NoCollision => transform.position = next_pos,
+                CollisionResult::CollidedWall(_) => {
+                    if x_free {
+                        transform.position = move_x;
+                    } else if y_free {
+                        transform.position = move_y;
                     }
                 }
-                RaycastResult::OutOfBounds => {
-                    return;
+                CollisionResult::Collided(_) => {
+                    // if x_free {
+                    //     transform.position = move_x;
+                    // } else if y_free {
+                    //     transform.position = move_y;
+                    // }
                 }
-                RaycastResult::HitEntity(v, _) => {
-                    let dist_to_ent = (v - transform.position).length();
-                    let safe_move_dist = (dist_to_ent - transform.size).max(0.0);
-                    transform.position += direction * safe_move_dist * 0.8;
-                }
-                RaycastResult::Miss => {
-                    transform.position += direction * speed * delta;
+                CollisionResult::OutOfBounds => {
+                    // 맵 경계 밖으로 나가지 않도록 위치 조정
+                    let clamped_x = next_pos
+                        .x
+                        .clamp(transform.size, spatial_grid.map_size.x - transform.size);
+                    let clamped_y = next_pos
+                        .y
+                        .clamp(transform.size, spatial_grid.map_size.y - transform.size);
+                    transform.position = Vector2::new(clamped_x, clamped_y);
                 }
             };
         });
@@ -135,7 +142,7 @@ pub fn seperation_force_system(
 ) {
     let to_move = query
         .iter()
-        .filter_map(|(e, transform, _)| {
+        .filter_map(|(e, transform, movement)| {
             let nearby_entities = spatial_grid
                 .query_entities(
                     transform.position,
@@ -144,7 +151,10 @@ pub fn seperation_force_system(
                 .unwrap_or(Vec::new());
             let mut total_force = Vector2::ZERO;
             for other_entity in nearby_entities {
-                if let Ok((_, other_transform, _)) = query.get(other_entity.entity) {
+                if let Ok((_, other_transform, other_movement)) = query.get(other_entity.entity) {
+                    if movement.moving && !other_movement.moving {
+                        continue;
+                    }
                     let to_other = transform.position - other_transform.position;
                     let distance = to_other.length();
                     if distance < (transform.size + other_transform.size + SEP_DIST) {

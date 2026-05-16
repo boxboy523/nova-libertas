@@ -33,6 +33,7 @@ pub struct MoveOrder {
 
 #[derive(Component)]
 pub struct FlowField {
+    pub goal: Vector2,
     pub field: Vec<Option<Vector2>>,
 }
 

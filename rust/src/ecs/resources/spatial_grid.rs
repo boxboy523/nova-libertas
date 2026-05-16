@@ -8,7 +8,7 @@ pub struct Ray {
     pub length: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EntityInfo {
     pub entity: Entity,
     pub radius: f32,
@@ -23,9 +23,18 @@ pub enum RaycastResult {
     OutOfBounds,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum CollisionResult {
+    Collided(EntityInfo),
+    CollidedWall((usize, usize)), // 충돌한 벽의 위치
+    NoCollision,
+    OutOfBounds,
+}
+
 #[derive(Resource, Debug)]
 pub struct SpatialGrid {
     cell_size: f32,
+    pub map_size: Vector2,
     width: usize,
     height: usize,
     cells: Vec<Option<Vec<EntityInfo>>>, // None Means it is Wall Cell
@@ -42,6 +51,7 @@ impl SpatialGrid {
             }
         }
         Self {
+            map_size: Vector2::new(map_width, map_height),
             cell_size,
             width,
             height,
@@ -149,9 +159,17 @@ impl SpatialGrid {
         } else {
             f32::MAX
         };
-        let delta_x = if ray.direction.x.abs() > 0.0001 { self.cell_size / ray.direction.x.abs() } else { f32::MAX };
-        let delta_y = if ray.direction.y.abs() > 0.0001 { self.cell_size / ray.direction.y.abs() } else { f32::MAX };
-        let mut len_last = 0.0;
+        let delta_x = if ray.direction.x.abs() > 0.0001 {
+            self.cell_size / ray.direction.x.abs()
+        } else {
+            f32::MAX
+        };
+        let delta_y = if ray.direction.y.abs() > 0.0001 {
+            self.cell_size / ray.direction.y.abs()
+        } else {
+            f32::MAX
+        };
+        let mut len_last;
         while total_x.min(total_y) < ray.length {
             len_last = total_x.min(total_y);
             if total_x < total_y {
@@ -171,7 +189,11 @@ impl SpatialGrid {
             }
             let mut len_current = total_x.min(total_y);
             let mut rtn = None;
-            if let Some(vec) = self.cells.get(self.width * grid_y + grid_x).and_then(|c| c.as_ref()) {
+            if let Some(vec) = self
+                .cells
+                .get(self.width * grid_y + grid_x)
+                .and_then(|c| c.as_ref())
+            {
                 for info in vec {
                     if let Some(ex) = exclude {
                         if ex.contains(&info.entity) {
@@ -208,40 +230,49 @@ impl SpatialGrid {
         RaycastResult::Miss
     }
 
-    pub fn get_push_out_vector(&self, position: Vector2) -> Vector2 {
-        let (grid_x, grid_y) = match self.world_to_grid(position) {
-            Some(g) => g,
-            None => return Vector2::ZERO,
-        };
-
-        if self.cells[grid_y * self.width + grid_x].is_some() {
-            return Vector2::ZERO; // 벽이 아님
-        }
-
-        // 벽 내부인 경우: 주변 빈 셀 탐색
-        let mut push_vec = Vector2::ZERO;
-        let mut min_dist_sq = f32::MAX;
-
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                if dx == 0 && dy == 0 { continue; }
-                let nx = grid_x as isize + dx;
-                let ny = grid_y as isize + dy;
-
-                if nx >= 0 && nx < self.width as isize && ny >= 0 && ny < self.height as isize {
-                    if self.cells[ny as usize * self.width + nx as usize].is_some() {
-                        let cell_center = Vector2::new((nx as f32 + 0.5) * self.cell_size, (ny as f32 + 0.5) * self.cell_size);
-                        let to_center = cell_center - position;
-                        let dist_sq = to_center.length_squared();
-                        if dist_sq < min_dist_sq {
-                            min_dist_sq = dist_sq;
-                            push_vec = to_center.normalized_or_zero();
+    pub fn collision_check(
+        &self,
+        position: Vector2,
+        radius: f32,
+        exclude: Option<&[Entity]>,
+    ) -> CollisionResult {
+        let grid_radius = (radius / self.cell_size).ceil() as isize;
+        if let Some((grid_x, grid_y)) = self.world_to_grid(position) {
+            for y in (grid_y as isize - grid_radius)..=(grid_y as isize + grid_radius) {
+                for x in (grid_x as isize - grid_radius)..=(grid_x as isize + grid_radius) {
+                    if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
+                        let idx = (y as usize) * self.width + (x as usize);
+                        if let Some(entities) = &self.cells[idx] {
+                            for entity in entities {
+                                if let Some(ex) = exclude {
+                                    if ex.contains(&entity.entity) {
+                                        continue;
+                                    }
+                                }
+                                if (position - entity.pos).length_squared()
+                                    < (radius + entity.radius).powi(2)
+                                {
+                                    return CollisionResult::Collided(entity.clone());
+                                }
+                            }
+                        } else {
+                            let cell_x = x as f32 * self.cell_size;
+                            let cell_y = y as f32 * self.cell_size;
+                            let nearest_x = position.x.clamp(cell_x, cell_x + self.cell_size);
+                            let nearest_y = position.y.clamp(cell_y, cell_y + self.cell_size);
+                            let dist_sq =
+                                (position.x - nearest_x).powi(2) + (position.y - nearest_y).powi(2);
+                            if dist_sq < radius.powi(2) {
+                                return CollisionResult::CollidedWall((x as usize, y as usize));
+                            }
                         }
                     }
                 }
             }
+        } else {
+            return CollisionResult::OutOfBounds;
         }
-        push_vec
+        CollisionResult::NoCollision
     }
 
     pub fn add_entity(&mut self, entity: Entity, pos: Vector2, radius: f32) -> anyhow::Result<()> {

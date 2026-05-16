@@ -25,13 +25,23 @@ pub struct MoveOrderEvent {
     pub units: Vec<Entity>, // 명령을 받을 유닛들
 }
 
-pub fn move_order_trigger(event: On<MoveOrderEvent>, mut commands: Commands) {
+pub fn move_order_trigger(
+    event: On<MoveOrderEvent>,
+    mut commands: Commands,
+    query: Query<Entity, With<MoveOrder>>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+    }
     commands.spawn((
         MoveOrder {
             target: event.target_position,
             followers: event.units.clone(),
         },
-        FlowField { field: Vec::new() },
+        FlowField {
+            field: Vec::new(),
+            goal: event.target_position,
+        },
     ));
 }
 

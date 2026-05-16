@@ -61,7 +61,7 @@ impl INode for UnitManager {
         }
 
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
-        for i in 0..1 {
+        for i in 0..10 {
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position: Vector2::new(

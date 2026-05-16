@@ -43,6 +43,12 @@ impl FlowGrid {
         let gy = position.y / self.cell_size;
         let grid_x = gx.floor() as usize;
         let grid_y = gy.floor() as usize;
+        let grid_goal_x = (flow_field.goal.x / self.cell_size).floor() as usize;
+        let grid_goal_y = (flow_field.goal.y / self.cell_size).floor() as usize;
+        if grid_x == grid_goal_x && grid_y == grid_goal_y {
+            return Some(Vector2::ZERO);
+        }
+
         let tx = gx - grid_x as f32;
         let ty = gy - grid_y as f32;
         let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
