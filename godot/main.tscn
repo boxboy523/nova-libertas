@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cwhnahy22yfbi" path="res://main.gd" id="1_ig7tw"]
 [ext_resource type="Texture2D" uid="uid://b2ka4u17n5u1x" path="res://icon.svg" id="2_0xm2m"]
+[ext_resource type="Script" uid="uid://b8pfral8hxmlq" path="res://drag.gd" id="3_h2yge"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_1bvp3"]
 size = Vector2(40, 40)
@@ -28,14 +29,20 @@ buffer = PackedFloat32Array(-2.2485325e+38, -2.2485325e+38, -2.2485325e+38, -2.2
 
 [node name="Main" type="Node2D" unique_id=481522562]
 script = ExtResource("1_ig7tw")
+metadata/_edit_vertical_guides_ = [-223.0]
 
 [node name="MultiMeshWall" type="MultiMeshInstance2D" parent="." unique_id=833738440]
+visible = false
 multimesh = SubResource("MultiMesh_0xm2m")
 texture = SubResource("GradientTexture2D_h2yge")
 
 [node name="MultiMeshUnit" type="MultiMeshInstance2D" parent="." unique_id=1779831690]
+visible = false
 multimesh = SubResource("MultiMesh_h2yge")
 texture = ExtResource("2_0xm2m")
 
 [node name="UnitManager" type="UnitManager" parent="." unique_id=619958865]
 map_csv_path = "res://res/map.csv"
+
+[node name="DragNode" type="Node2D" parent="." unique_id=807051699]
+script = ExtResource("3_h2yge")

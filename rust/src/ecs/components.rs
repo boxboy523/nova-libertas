@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
@@ -18,8 +20,9 @@ pub struct UnitMovement {
     pub max_speed: f32,
     pub acceleration: f32,
     pub dir_vec: Vector2,
+    pub preferred_dir: Vector2, // 유닛이 선호하는 이동 방향 (avoidance 등으로 인해 실제 이동 방향과 다를 수 있음)
     pub moving: bool,
-    pub seperation_force: Vector2,
+    pub dist_target_sq: f32, // 목표 지점과의 직선거리 제곱
 }
 
 #[derive(Component)]
@@ -28,7 +31,8 @@ pub struct Dead; // 유닛이 죽었는지 여부
 #[derive(Component)]
 pub struct MoveOrder {
     pub target: Vector2,
-    pub followers: Vec<Entity>, // 이 명령을 따르는 유닛들
+    pub followers: HashSet<Entity>, // 이 명령을 따르는 유닛들
+    pub following: HashSet<Entity>, // 이 명령을 따르는 유닛들 중 현재 따라가는 유닛들
 }
 
 #[derive(Component)]
@@ -38,13 +42,7 @@ pub struct FlowField {
 }
 
 #[derive(Component)]
-struct Delayed {
-    timer: f32,
-    action: DelayedAction,
-}
-
-#[derive(Component)]
-enum DelayedAction {
-    Despawn,
-    Movement(Vector2),
+pub struct DelayedStopTrigger {
+    pub timer: f32,
+    pub order: Entity, // 이 트리거를 생성한 MoveOrder 엔티티
 }

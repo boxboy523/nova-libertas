@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::prelude::*;
 use bevy_ecs::prelude::*;
 use godot::prelude::*;
@@ -22,7 +24,7 @@ pub fn spawn_units_trigger(
 #[derive(Event)]
 pub struct MoveOrderEvent {
     pub target_position: Vector2,
-    pub units: Vec<Entity>, // 명령을 받을 유닛들
+    pub units: HashSet<Entity>, // 명령을 받을 유닛들
 }
 
 pub fn move_order_trigger(
@@ -37,12 +39,34 @@ pub fn move_order_trigger(
         MoveOrder {
             target: event.target_position,
             followers: event.units.clone(),
+            following: event.units.clone(),
         },
         FlowField {
             field: Vec::new(),
             goal: event.target_position,
         },
     ));
+}
+
+pub fn despawn_order_trigger(
+    remove: On<Remove, MoveOrder>,
+    mut commands: Commands,
+    query_order: Query<&MoveOrder>,
+    triggered: Query<&DelayedStopTrigger>,
+    mut query_movement: Query<&mut UnitMovement>,
+) {
+    if let Ok(order) = query_order.get(remove.entity) {
+        for e in &order.followers {
+            if triggered.contains(*e) {
+                commands.entity(*e).remove::<DelayedStopTrigger>();
+            }
+            if let Ok(mut movement) = query_movement.get_mut(*e) {
+                movement.moving = false;
+                movement.dist_target_sq = f32::MAX;
+                movement.dir_vec = Vector2::ZERO;
+            }
+        }
+    }
 }
 
 #[derive(Event)]

@@ -51,29 +51,76 @@ impl FlowGrid {
 
         let tx = gx - grid_x as f32;
         let ty = gy - grid_y as f32;
-        let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+        let base_x = if tx < 0.5 {
+            grid_x as isize - 1
+        } else {
+            grid_x as isize
+        }
+        .max(0) as usize;
+        let base_y = if ty < 0.5 {
+            grid_y as isize - 1
+        } else {
+            grid_y as isize
+        }
+        .max(0) as usize;
+        let tx = if tx < 0.5 { tx + 0.5 } else { tx - 0.5 }.max(0.0);
+        let ty = if ty < 0.5 { ty + 0.5 } else { ty - 0.5 }.max(0.0);
         let v00 = flow_field
             .field
-            .get(grid_y * self.width + grid_x)?
-            .as_ref()?;
+            .get(base_y * self.width + base_x)
+            .and_then(|v| v.to_owned());
         let v10 = flow_field
             .field
-            .get(grid_y * self.width + (grid_x + 1))
-            .and_then(|v| v.as_ref())
-            .unwrap_or(v00);
+            .get(base_y * self.width + (base_x + 1))
+            .and_then(|v| v.to_owned());
         let v01 = flow_field
             .field
-            .get((grid_y + 1) * self.width + grid_x)
-            .and_then(|v| v.as_ref())
-            .unwrap_or(v00);
+            .get((base_y + 1) * self.width + base_x)
+            .and_then(|v| v.to_owned());
         let v11 = flow_field
             .field
-            .get((grid_y + 1) * self.width + (grid_x + 1))
-            .and_then(|v| v.as_ref())
-            .unwrap_or(v00);
-        let vx = lerp(lerp(v00.x, v10.x, tx), lerp(v01.x, v11.x, tx), ty);
-        let vy = lerp(lerp(v00.y, v10.y, tx), lerp(v01.y, v11.y, tx), ty);
-        Some(Vector2::new(vx, vy))
+            .get((base_y + 1) * self.width + (base_x + 1))
+            .and_then(|v| v.to_owned());
+        let mut total = Vector2::ZERO;
+        let mut weight = 0.0;
+
+        if let Some(v) = v00 {
+            let weight_gain = (1.0 - tx) * (1.0 - ty);
+            if weight_gain > 0.1 {
+                // godot_print!("v00: {:?}, weight_gain: {}", v, weight_gain);
+                total += v * weight_gain;
+                weight += weight_gain;
+            }
+        }
+        if let Some(v) = v10 {
+            let weight_gain = tx * (1.0 - ty);
+            if weight_gain > 0.1 {
+                // godot_print!("v10: {:?}, weight_gain: {}", v, weight_gain);
+                total += v * weight_gain;
+                weight += weight_gain;
+            }
+        }
+        if let Some(v) = v01 {
+            let weight_gain = (1.0 - tx) * ty;
+            if weight_gain > 0.1 {
+                // godot_print!("v01: {:?}, weight_gain: {}", v, weight_gain);
+                total += v * weight_gain;
+                weight += weight_gain;
+            }
+        }
+        if let Some(v) = v11 {
+            let weight_gain = tx * ty;
+            if weight_gain > 0.1 {
+                // godot_print!("v11: {:?}, weight_gain: {}", v, weight_gain);
+                total += v * weight_gain;
+                weight += weight_gain;
+            }
+        }
+
+        if weight < f32::EPSILON {
+            return None;
+        }
+        Some(total / weight)
     }
 
     pub fn gen_flow_field(&self, target: Vector2) -> anyhow::Result<Vec<Option<Vector2>>> {

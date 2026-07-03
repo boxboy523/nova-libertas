@@ -25,19 +25,18 @@ pub enum RaycastResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CollisionResult {
-    Collided(EntityInfo),
-    CollidedWall((usize, usize)), // 충돌한 벽의 위치
+    Collided(Vec<EntityInfo>, Vec<(usize, usize)>),
     NoCollision,
     OutOfBounds,
 }
 
 #[derive(Resource, Debug)]
 pub struct SpatialGrid {
-    cell_size: f32,
+    pub cell_size: f32,
     pub map_size: Vector2,
-    width: usize,
-    height: usize,
-    cells: Vec<Option<Vec<EntityInfo>>>, // None Means it is Wall Cell
+    pub width: usize,
+    pub height: usize,
+    pub cells: Vec<Option<Vec<EntityInfo>>>, // None Means it is Wall Cell
 }
 
 impl SpatialGrid {
@@ -236,8 +235,10 @@ impl SpatialGrid {
         radius: f32,
         exclude: Option<&[Entity]>,
     ) -> CollisionResult {
-        let grid_radius = (radius / self.cell_size).ceil() as isize;
+        let grid_radius = (radius / self.cell_size).ceil() as isize + 1;
         if let Some((grid_x, grid_y)) = self.world_to_grid(position) {
+            let mut collided_entities = Vec::new();
+            let mut collided_walls = Vec::new();
             for y in (grid_y as isize - grid_radius)..=(grid_y as isize + grid_radius) {
                 for x in (grid_x as isize - grid_radius)..=(grid_x as isize + grid_radius) {
                     if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
@@ -252,7 +253,7 @@ impl SpatialGrid {
                                 if (position - entity.pos).length_squared()
                                     < (radius + entity.radius).powi(2)
                                 {
-                                    return CollisionResult::Collided(entity.clone());
+                                    collided_entities.push(entity.clone());
                                 }
                             }
                         } else {
@@ -263,11 +264,14 @@ impl SpatialGrid {
                             let dist_sq =
                                 (position.x - nearest_x).powi(2) + (position.y - nearest_y).powi(2);
                             if dist_sq < radius.powi(2) {
-                                return CollisionResult::CollidedWall((x as usize, y as usize));
+                                collided_walls.push((x as usize, y as usize));
                             }
                         }
                     }
                 }
+            }
+            if !collided_entities.is_empty() || !collided_walls.is_empty() {
+                return CollisionResult::Collided(collided_entities, collided_walls);
             }
         } else {
             return CollisionResult::OutOfBounds;
@@ -317,6 +321,30 @@ impl SpatialGrid {
                     let idx = (y as usize) * self.width + (x as usize);
                     if let Some(entities) = &self.cells[idx] {
                         result.extend(entities.iter().cloned());
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    pub fn query_walls(
+        &self,
+        position: Vector2,
+        radius: f32,
+    ) -> anyhow::Result<Vec<(usize, usize)>> {
+        let mut result = Vec::new();
+        let (grid_x, grid_y) = self
+            .world_to_grid(position)
+            .ok_or_else(|| anyhow::anyhow!("Query position is out of grid bounds"))?;
+        let radius_in_cells = (radius / self.cell_size).ceil() as isize;
+
+        for y in (grid_y as isize - radius_in_cells)..=(grid_y as isize + radius_in_cells) {
+            for x in (grid_x as isize - radius_in_cells)..=(grid_x as isize + radius_in_cells) {
+                if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
+                    let idx = (y as usize) * self.width + (x as usize);
+                    if self.cells[idx].is_none() {
+                        result.push((x as usize, y as usize));
                     }
                 }
             }

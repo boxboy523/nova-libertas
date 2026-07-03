@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
@@ -48,6 +48,7 @@ impl INode for UnitManager {
         self.world.add_observer(spawn_units_trigger);
         self.world.add_observer(move_order_trigger);
         self.world.add_observer(spawn_wall_trigger);
+        self.world.add_observer(despawn_order_trigger);
 
         for y in 0..map_height {
             for x in 0..map_width {
@@ -61,12 +62,12 @@ impl INode for UnitManager {
         }
 
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
-        for i in 0..10 {
+        for i in 0..1 {
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position: Vector2::new(
-                        (i % 50) as f32 * 40.0 + 50.0,
-                        (i / 50) as f32 * 40.0 + 50.0,
+                        (i % 10) as f32 * 40.0 + 50.0,
+                        (i / 10) as f32 * 40.0 + 50.0,
                     ),
                     rotation: 0.0,
                     scale: Vector2::new(1.0, 1.0),
@@ -75,23 +76,31 @@ impl INode for UnitManager {
                 stats: UnitMovement {
                     speed: 0.0,
                     max_speed: 100.0,
-                    acceleration: 20.0,
+                    acceleration: 200.0,
                     moving: false,
                     dir_vec: Vector2::ZERO,
-                    seperation_force: Vector2::ZERO,
+                    preferred_dir: Vector2::ZERO,
+                    dist_target_sq: f32::MAX,
                 },
                 t_type: ThingType::Test,
             });
         }
 
-        self.schedule.add_systems(apply_move_system);
-        self.schedule.add_systems(flow_movement_system);
-        self.schedule.add_systems(seperation_force_system);
         self.schedule.add_systems(transform_update_system);
         self.schedule.add_systems(despawn_units_system);
         self.schedule.add_systems(update_flow_field_system);
         self.schedule.add_systems(update_spatial_grid_system);
         self.schedule.add_systems(acceleration_system);
+        self.schedule.add_systems(delayed_stop_system);
+        self.schedule.add_systems(
+            (
+                flow_movement_system,
+                avoid_system,
+                smooth_wall_passing_system,
+                apply_move_system,
+            )
+                .chain(),
+        );
     }
 
     fn physics_process(&mut self, delta: f64) {
@@ -153,11 +162,39 @@ impl UnitManager {
             .world
             .query_filtered::<Entity, (With<Transform>, With<UnitMovement>)>()
             .iter(&self.world)
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
         self.world.trigger(MoveOrderEvent {
             target_position: target,
             units,
         });
+    }
+
+    #[func]
+    pub fn get_flow_vectors(&mut self) -> PackedFloat32Array {
+        let flow_grid = self.world.resource::<FlowGrid>();
+        let (width, height) = (flow_grid.width, flow_grid.height);
+        let mut buffer = vec![0.0; width * height * 4]; // 각 셀마다 (world_x, world_y, flow_x, flow_y) 4개의 float
+        let cell_size = flow_grid.cell_size;
+        let flow_field = self.world.query::<(&FlowField,)>().iter(&self.world).next();
+        if let Some((flow_field,)) = flow_field {
+            for y in 0..height {
+                for x in 0..width {
+                    let idx = y * width + x;
+                    let world_x = (x as f32 + 0.5) * cell_size;
+                    let world_y = (y as f32 + 0.5) * cell_size;
+                    if idx * 4 + 3 >= buffer.len() || idx >= flow_field.field.len() {
+                        continue; // 버퍼 범위를 벗어나지 않도록 체크
+                    }
+                    buffer[idx * 4] = world_x;
+                    buffer[idx * 4 + 1] = world_y;
+                    if let Some(vec) = &flow_field.field[idx] {
+                        buffer[idx * 4 + 2] = vec.x;
+                        buffer[idx * 4 + 3] = vec.y;
+                    }
+                }
+            }
+        }
+        PackedFloat32Array::from(buffer.as_slice())
     }
 }
 
