@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ecs::prelude::*;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, system::IntoResult};
 use godot::{
     classes::{MultiMesh, ProjectSettings},
     prelude::*,
@@ -15,7 +15,6 @@ pub struct UnitManager {
     world: World,
     schedule: Schedule,
     base: Base<Node>,
-    render_buffer: HashMap<ThingType, Vec<f32>>,
     #[export]
     map_csv_path: GString,
 }
@@ -28,12 +27,10 @@ impl INode for UnitManager {
             schedule: Schedule::default(),
             base,
             map_csv_path: GString::new(),
-            render_buffer: HashMap::new(),
         }
     }
     fn ready(&mut self) {
-        let transform_buffer = TransformBuffer::new(64);
-        self.world.insert_resource(transform_buffer);
+        self.world.insert_resource(TransformBuffer::new());
         let path = ProjectSettings::singleton().globalize_path(&self.map_csv_path);
         let (map_width, map_height, wall_data) = load_map_from_csv(&path.to_string());
         let map_width_f = map_width as f32 * CELL_SIZE;
@@ -62,7 +59,7 @@ impl INode for UnitManager {
         }
 
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
-        for i in 0..1 {
+        for i in 0..20 {
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position: Vector2::new(
@@ -72,6 +69,8 @@ impl INode for UnitManager {
                     rotation: 0.0,
                     scale: Vector2::new(1.0, 1.0),
                     size: 10.0,
+                    buffer_index: 0,
+                    t_type: ThingType::Test,
                 },
                 stats: UnitMovement {
                     speed: 0.0,
@@ -82,7 +81,6 @@ impl INode for UnitManager {
                     preferred_dir: Vector2::ZERO,
                     dist_target_sq: f32::MAX,
                 },
-                t_type: ThingType::Test,
             });
         }
 
@@ -118,34 +116,15 @@ impl UnitManager {
             1 => ThingType::Wall,
             _ => return, // 지원하지 않는 ThingType이면 함수 종료
         };
-        let mut transform_buffer = self.world.resource_mut::<TransformBuffer>();
-        let buffer = &mut self.render_buffer.entry(t_type).or_insert_with(Vec::new);
-        let mut buffer_len = 0;
-        for chunk_id in 0..transform_buffer.chunks.len() {
-            if transform_buffer.chunks[chunk_id].t_type != Some(t_type) {
-                continue; // 현재 ThingType과 일치하는 청크가 아니면 건너뜀
-            }
-            //if !transform_buffer.chunks[chunk_id].modified {
-            //    buffer_idx += 1;
-            //    continue;
-            //}
-            let chunk_len = transform_buffer.chunks[chunk_id].length;
-            set_or_append(
-                buffer,
-                buffer_len,
-                &transform_buffer.data
-                    [chunk_id * CHUNK_SIZE * 8..chunk_id * CHUNK_SIZE * 8 + chunk_len * 8],
-            );
-            transform_buffer.chunks[chunk_id].modified = false;
-            buffer_len += chunk_len * 8;
+        let transform_buffer = self.world.resource_mut::<TransformBuffer>();
+        let Some(buffer) = transform_buffer.get_buffer(t_type) else {
+            godot_error!("TransformBuffer: ThingType {:?} not found", t_type);
+            return;
+        };
+        if (buffer.len() / 8) != (multimesh.get_instance_count() as usize) {
+            multimesh.set_instance_count((buffer.len() / 8) as i32);
         }
-        if (buffer_len / 8) != (multimesh.get_instance_count() as usize) {
-            multimesh.set_instance_count((buffer_len / 8) as i32);
-        }
-
-        //godot_print!("Buffer length for {:?}: {}", t_type, buffer_len / 8);
-
-        let buffer = PackedFloat32Array::from(buffer[..buffer_len].as_ref());
+        let buffer = PackedFloat32Array::from(buffer[..buffer.len()].as_ref());
 
         // 고도 엔진의 렌더링 서버에 메모리 블록 통째로 덮어쓰기
         multimesh.set_buffer(&buffer);
@@ -160,7 +139,7 @@ impl UnitManager {
     pub fn order_move(&mut self, target: Vector2) {
         let units = self
             .world
-            .query_filtered::<Entity, (With<Transform>, With<UnitMovement>)>()
+            .query_filtered::<Entity, (With<Transform>, With<UnitMovement>, With<Selected>)>()
             .iter(&self.world)
             .collect::<HashSet<_>>();
         self.world.trigger(MoveOrderEvent {
@@ -196,14 +175,45 @@ impl UnitManager {
         }
         PackedFloat32Array::from(buffer.as_slice())
     }
-}
 
-fn set_or_append(buffer: &mut Vec<f32>, index: usize, value: &[f32]) {
-    if index + value.len() <= buffer.len() {
-        buffer[index..index + value.len()].copy_from_slice(value);
-    } else {
-        buffer.resize(index, 0.0);
-        buffer.extend_from_slice(value);
+    #[func]
+    pub fn select_unit_in_area(&mut self, top_left: Vector2, bottom_right: Vector2) {
+        let sgrid = self.world.resource::<SpatialGrid>();
+        if let Ok(result_vec) = sgrid.query_entities_rect(top_left, bottom_right) {
+            for entity_info in result_vec {
+                self.world.entity_mut(entity_info.entity).insert(Selected);
+            }
+        } else {
+            godot_error!(
+                "SpatialGrid query failed in area {:?} to {:?}",
+                top_left,
+                bottom_right
+            );
+            return;
+        }
+    }
+
+    #[func]
+    pub fn remove_selection(&mut self) {
+        let selected_entities = self
+            .world
+            .query_filtered::<Entity, With<Selected>>()
+            .iter(&self.world)
+            .collect::<Vec<_>>();
+        for entity in selected_entities {
+            self.world.entity_mut(entity).remove::<Selected>();
+        }
+    }
+
+    #[func]
+    pub fn get_selected_units(&mut self) -> PackedInt32Array {
+        let selected_units = self
+            .world
+            .query_filtered::<&Transform, (With<UnitMovement>, With<Selected>)>()
+            .iter(&self.world)
+            .flat_map(|t| [t.t_type as i32, t.buffer_index as i32])
+            .collect::<Vec<_>>();
+        PackedInt32Array::from(selected_units.as_slice())
     }
 }
 

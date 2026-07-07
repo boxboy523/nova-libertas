@@ -8,7 +8,6 @@ use godot::prelude::*;
 pub struct SpawnUnitEvent {
     pub transform: Transform,
     pub stats: UnitMovement,
-    pub t_type: ThingType,
 }
 
 pub fn spawn_units_trigger(
@@ -16,9 +15,9 @@ pub fn spawn_units_trigger(
     mut commands: Commands,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    let e = commands.spawn((event.transform, event.stats)).id();
-    let idx = buffer.allocate(event.t_type, e);
-    commands.entity(e).insert(TransformID(idx));
+    let e = commands.spawn(event.stats).id();
+    let transform = buffer.add(event.transform, e);
+    commands.entity(e).insert(transform);
 }
 
 #[derive(Event)]
@@ -30,10 +29,11 @@ pub struct MoveOrderEvent {
 pub fn move_order_trigger(
     event: On<MoveOrderEvent>,
     mut commands: Commands,
-    query: Query<Entity, With<MoveOrder>>,
+    mut query: Query<&mut MoveOrder>,
 ) {
-    for entity in query.iter() {
-        commands.entity(entity).despawn();
+    for mut order in query.iter_mut() {
+        order.followers.retain(|e| !event.units.contains(e));
+        order.following.retain(|e| !event.units.contains(e));
     }
     commands.spawn((
         MoveOrder {
@@ -80,14 +80,17 @@ pub fn spawn_wall_trigger(
     mut commands: Commands,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    let e = commands
-        .spawn((Transform {
+    let e = commands.spawn_empty().id();
+    let transform = buffer.add(
+        Transform {
             position: event.position,
             rotation: 0.0,
             scale: Vector2::new(1.0, 1.0), // 벽의 스케일은 필요에 따라 조정
             size: event.size.x.max(event.size.y) / 2.0, // 벽의 크기에 따라 size 설정
-        },))
-        .id();
-    let idx = buffer.allocate(ThingType::Wall, e);
-    commands.entity(e).insert(TransformID(idx));
+            buffer_index: 0,               // 초기값, TransformBuffer에서 할당 후 업데이트
+            t_type: ThingType::Wall,
+        },
+        e,
+    );
+    commands.entity(e).insert(transform);
 }

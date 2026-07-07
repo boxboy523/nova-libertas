@@ -87,7 +87,6 @@ impl FlowGrid {
         if let Some(v) = v00 {
             let weight_gain = (1.0 - tx) * (1.0 - ty);
             if weight_gain > 0.1 {
-                // godot_print!("v00: {:?}, weight_gain: {}", v, weight_gain);
                 total += v * weight_gain;
                 weight += weight_gain;
             }
@@ -95,7 +94,6 @@ impl FlowGrid {
         if let Some(v) = v10 {
             let weight_gain = tx * (1.0 - ty);
             if weight_gain > 0.1 {
-                // godot_print!("v10: {:?}, weight_gain: {}", v, weight_gain);
                 total += v * weight_gain;
                 weight += weight_gain;
             }
@@ -103,7 +101,6 @@ impl FlowGrid {
         if let Some(v) = v01 {
             let weight_gain = (1.0 - tx) * ty;
             if weight_gain > 0.1 {
-                // godot_print!("v01: {:?}, weight_gain: {}", v, weight_gain);
                 total += v * weight_gain;
                 weight += weight_gain;
             }
@@ -111,7 +108,6 @@ impl FlowGrid {
         if let Some(v) = v11 {
             let weight_gain = tx * ty;
             if weight_gain > 0.1 {
-                // godot_print!("v11: {:?}, weight_gain: {}", v, weight_gain);
                 total += v * weight_gain;
                 weight += weight_gain;
             }

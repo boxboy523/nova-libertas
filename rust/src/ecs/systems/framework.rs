@@ -3,33 +3,34 @@ use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
 pub fn transform_update_system(
-    mut query: Query<(&Transform, &TransformID), Changed<Transform>>,
+    query: Query<&Transform, Changed<Transform>>,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    query.iter_mut().for_each(|(transform, id)| {
-        let (sin, cos) = transform.rotation.sin_cos();
-        let i = id.0 * 8;
-        let chunk_index = id.0 / CHUNK_SIZE;
-        buffer.chunks[chunk_index].modified = true;
-
-        buffer.data[i] = cos * transform.scale.x; // x.x
-        buffer.data[i + 1] = sin * transform.scale.y; // y.x
-        buffer.data[i + 2] = 0.0; // padding
-        buffer.data[i + 3] = transform.position.x; // x.w (translation x)
-        buffer.data[i + 4] = sin * transform.scale.x; // x.y
-        buffer.data[i + 5] = -cos * transform.scale.y; // y.y
-        buffer.data[i + 6] = 0.0; // padding
-        buffer.data[i + 7] = transform.position.y; // y.w (translation y)
+    query.iter().for_each(|transform| {
+        buffer.update(*transform);
     });
 }
 
 pub fn despawn_units_system(
     mut commands: Commands,
-    query: Query<(Entity, &TransformID), With<Dead>>,
+    dead_query: Query<Entity, With<Dead>>,
+    mut query: Query<&mut Transform>,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    for (entity, id) in query.iter() {
+    for entity in dead_query.iter() {
+        let Ok(transform) = query.get(entity) else {
+            godot_print!(
+                "despawn_units_system: Entity {:?} has no Transform component",
+                entity
+            );
+            continue;
+        };
         commands.entity(entity).despawn();
-        buffer.free(id.0);
+        if let Some(info) = buffer.delete(*transform) {
+            // Update the swapped entity's Transform component with the new buffer index
+            if let Ok(mut transform) = query.get_mut(info.swapped_entity) {
+                transform.buffer_index = info.swapped_index;
+            }
+        }
     }
 }

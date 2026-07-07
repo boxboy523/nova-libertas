@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
@@ -8,11 +9,10 @@ pub struct Transform {
     pub position: Vector2,
     pub rotation: f32,
     pub scale: Vector2,
-    pub size: f32, // 유닛의 크기 (반지름)
+    pub size: f32,           // 유닛의 크기 (반지름)
+    pub buffer_index: usize, // TransformBuffer에서의 인덱스
+    pub t_type: ThingType,   // 유닛의 종류 (ThingType)
 }
-
-#[derive(Component)]
-pub struct TransformID(pub usize); // 유닛마다 고유한 Transform 버퍼 인덱스 (필요 시)
 
 #[derive(Component, Clone, Copy)]
 pub struct UnitMovement {
@@ -46,3 +46,6 @@ pub struct DelayedStopTrigger {
     pub timer: f32,
     pub order: Entity, // 이 트리거를 생성한 MoveOrder 엔티티
 }
+
+#[derive(Component)]
+pub struct Selected; // 유닛이 선택되었는지 여부

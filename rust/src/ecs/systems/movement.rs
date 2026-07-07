@@ -46,7 +46,6 @@ pub fn smooth_wall_passing_system(
                 spatial_grid.collision_check(transform.position, transform.size, Some(&[entity]))
             {
                 if !walls.is_empty() {
-                    godot_print!("wall detected at {:?}, adjusting direction", walls[0]);
                     let wall_center = Vector2::new(
                         (walls[0].0 as f32 + 0.5) * spatial_grid.cell_size,
                         (walls[0].1 as f32 + 0.5) * spatial_grid.cell_size,
@@ -157,10 +156,6 @@ pub fn flow_movement_system(
                             .map(|e| e.entity)
                             .any(|e| finished.contains(&e))
                         {
-                            godot_print!(
-                                "Unit {:?} collided with finished unit, scheduling stop trigger",
-                                unit_entity
-                            );
                             commands.entity(unit_entity).insert(DelayedStopTrigger {
                                 timer: STOP_DELAY,
                                 order: entity,
@@ -197,7 +192,6 @@ pub fn delayed_stop_system(
         .for_each(|(entity, mut trigger, mut movement)| {
             trigger.timer -= delta;
             if trigger.timer <= 0.0 {
-                godot_print!("DelayedStopTrigger expired for entity {:?}", entity);
                 if let Ok(mut order) = orders.get_mut(trigger.order) {
                     order.following.remove(&entity);
                     if order.following.is_empty() {

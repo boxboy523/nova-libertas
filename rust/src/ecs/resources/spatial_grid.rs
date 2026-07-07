@@ -328,6 +328,32 @@ impl SpatialGrid {
         Ok(result)
     }
 
+    pub fn query_entities_rect(
+        &self,
+        min: Vector2,
+        max: Vector2,
+    ) -> anyhow::Result<Vec<EntityInfo>> {
+        let mut result = Vec::new();
+        let (grid_min_x, grid_min_y) = self
+            .world_to_grid(min)
+            .ok_or_else(|| anyhow::anyhow!("Query min position is out of grid bounds"))?;
+        let (grid_max_x, grid_max_y) = self
+            .world_to_grid(max)
+            .ok_or_else(|| anyhow::anyhow!("Query max position is out of grid bounds"))?;
+
+        for y in grid_min_y..=grid_max_y {
+            for x in grid_min_x..=grid_max_x {
+                if x < self.width && y < self.height {
+                    let idx = y * self.width + x;
+                    if let Some(entities) = &self.cells[idx] {
+                        result.extend(entities.iter().cloned());
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+
     pub fn query_walls(
         &self,
         position: Vector2,
