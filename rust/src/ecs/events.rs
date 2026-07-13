@@ -8,6 +8,7 @@ use godot::prelude::*;
 pub struct SpawnUnitEvent {
     pub transform: Transform,
     pub stats: UnitMovement,
+    pub team: Team,
 }
 
 pub fn spawn_units_trigger(
@@ -15,7 +16,7 @@ pub fn spawn_units_trigger(
     mut commands: Commands,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    let e = commands.spawn(event.stats).id();
+    let e = commands.spawn((event.stats, event.team)).id();
     let transform = buffer.add(event.transform, e);
     commands.entity(e).insert(transform);
 }

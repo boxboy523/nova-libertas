@@ -5,7 +5,7 @@ pub mod systems;
 
 pub mod prelude {
     pub use crate::ecs::components::{
-        Dead, DelayedStopTrigger, FlowField, MoveOrder, Selected, Transform, UnitMovement,
+        Dead, DelayedStopTrigger, FlowField, MoveOrder, Selected, Team, Transform, UnitMovement,
     };
     pub use crate::ecs::events::{
         despawn_order_trigger, move_order_trigger, spawn_units_trigger, spawn_wall_trigger,

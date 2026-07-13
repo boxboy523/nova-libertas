@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ecs::prelude::*;
-use bevy_ecs::{prelude::*, system::IntoResult};
+use bevy_ecs::prelude::*;
 use godot::{
     classes::{MultiMesh, ProjectSettings},
     prelude::*,
 };
+use strum::IntoEnumIterator;
 
 const CELL_SIZE: f32 = 40.0;
 
@@ -59,7 +60,7 @@ impl INode for UnitManager {
         }
 
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
-        for i in 0..20 {
+        for i in 0..30 {
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position: Vector2::new(
@@ -81,6 +82,11 @@ impl INode for UnitManager {
                     preferred_dir: Vector2::ZERO,
                     dist_target_sq: f32::MAX,
                 },
+                team: if i % 2 == 0 {
+                    Team::Player
+                } else {
+                    Team::Enemy
+                },
             });
         }
 
@@ -99,6 +105,11 @@ impl INode for UnitManager {
             )
                 .chain(),
         );
+        for t_type in ThingType::iter() {
+            godot_print!("UnitManager: Emitting update_type for {:?}", t_type);
+            self.base_mut()
+                .call_deferred("update_type", &[(t_type as i64).to_variant()]);
+        }
     }
 
     fn physics_process(&mut self, delta: f64) {
@@ -109,13 +120,14 @@ impl INode for UnitManager {
 
 #[godot_api]
 impl UnitManager {
+    #[signal]
+    pub fn selection_changed(thing_type: i64, indices: PackedInt32Array);
+
+    #[signal]
+    pub fn t_type_changed(thing_type: i64, indices: PackedInt32Array, team: PackedInt32Array);
+
     #[func]
-    pub fn update_multimesh_buffer(&mut self, thing_type: i64, mut multimesh: Gd<MultiMesh>) {
-        let t_type = match thing_type {
-            0 => ThingType::Test,
-            1 => ThingType::Wall,
-            _ => return, // 지원하지 않는 ThingType이면 함수 종료
-        };
+    pub fn update_multimesh_buffer(&mut self, t_type: ThingType, mut multimesh: Gd<MultiMesh>) {
         let transform_buffer = self.world.resource_mut::<TransformBuffer>();
         let Some(buffer) = transform_buffer.get_buffer(t_type) else {
             godot_error!("TransformBuffer: ThingType {:?} not found", t_type);
@@ -179,9 +191,29 @@ impl UnitManager {
     #[func]
     pub fn select_unit_in_area(&mut self, top_left: Vector2, bottom_right: Vector2) {
         let sgrid = self.world.resource::<SpatialGrid>();
-        if let Ok(result_vec) = sgrid.query_entities_rect(top_left, bottom_right) {
-            for entity_info in result_vec {
-                self.world.entity_mut(entity_info.entity).insert(Selected);
+        let units = if top_left == bottom_right {
+            if let Some(units) = sgrid.get_entities_at(top_left) {
+                Ok(units)
+            } else {
+                Ok(vec![])
+            }
+        } else {
+            sgrid.query_entities_rect(top_left, bottom_right)
+        };
+        if let Ok(result_vec) = units {
+            let mut q = self.world.query::<&Team>();
+            let to_select = result_vec
+                .into_iter()
+                .filter(|e| {
+                    if let Ok(team) = q.get(&self.world, e.entity) {
+                        *team == Team::Player
+                    } else {
+                        false
+                    }
+                })
+                .collect::<Vec<_>>();
+            for entity in to_select {
+                self.world.entity_mut(entity.entity).insert(Selected);
             }
         } else {
             godot_error!(
@@ -190,6 +222,26 @@ impl UnitManager {
                 bottom_right
             );
             return;
+        }
+
+        let mut grouped = HashMap::new();
+        let mut q = self.world.query_filtered::<&Transform, With<Selected>>();
+        q.iter(&self.world).for_each(|transform| {
+            grouped
+                .entry(transform.t_type)
+                .or_insert_with(Vec::new)
+                .push(transform.buffer_index as i32);
+        });
+
+        for (t_type, indices) in grouped {
+            self.base_mut().call_deferred(
+                "emit_signal",
+                &[
+                    "selection_changed".to_variant(),
+                    (t_type as i64).to_variant(),
+                    PackedInt32Array::from(indices.as_slice()).to_variant(),
+                ],
+            );
         }
     }
 
@@ -203,6 +255,16 @@ impl UnitManager {
         for entity in selected_entities {
             self.world.entity_mut(entity).remove::<Selected>();
         }
+
+        for t in ThingType::iter() {
+            self.base_mut().emit_signal(
+                "selection_changed",
+                &[
+                    (t as i64).to_variant(),
+                    PackedInt32Array::new().to_variant(),
+                ],
+            );
+        }
     }
 
     #[func]
@@ -214,6 +276,27 @@ impl UnitManager {
             .flat_map(|t| [t.t_type as i32, t.buffer_index as i32])
             .collect::<Vec<_>>();
         PackedInt32Array::from(selected_units.as_slice())
+    }
+
+    #[func]
+    pub fn update_type(&mut self, t_type: ThingType) {
+        let mut indices = Vec::new();
+        let mut teams = Vec::new();
+        let mut q = self.world.query::<(&Transform, &Team)>();
+        q.iter(&self.world).for_each(|(transform, team)| {
+            if transform.t_type == t_type {
+                indices.push(transform.buffer_index as i32);
+                teams.push(*team as i32);
+            }
+        });
+        self.base_mut().emit_signal(
+            "t_type_changed",
+            &[
+                (t_type as i32).to_variant(),
+                PackedInt32Array::from(indices.as_slice()).to_variant(),
+                PackedInt32Array::from(teams.as_slice()).to_variant(),
+            ],
+        );
     }
 }
 

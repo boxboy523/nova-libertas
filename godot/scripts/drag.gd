@@ -6,8 +6,6 @@ var drag_start = Vector2.ZERO
 var drag_end = Vector2.ZERO
 var is_dragging = false
 
-signal selection_changed(t_type: int, new_selection: Array)
-
 func _unhandled_input(event):
     if event is InputEventMouseButton:
         if event.button_index == MOUSE_BUTTON_LEFT:
@@ -17,6 +15,8 @@ func _unhandled_input(event):
             else:
                 is_dragging = false
                 # 선택 처리
+                if drag_end == Vector2.ZERO:
+                    drag_end = drag_start
                 var rect_min = Vector2(min(drag_start.x, drag_end.x), min(drag_start.y, drag_end.y))
                 var rect_max = Vector2(max(drag_start.x, drag_end.x), max(drag_start.y, drag_end.y))
                 _select(rect_min, rect_max)
@@ -36,13 +36,3 @@ func _draw():
 func _select(rect_min: Vector2, rect_max: Vector2):
     unit_manager.remove_selection()
     unit_manager.select_unit_in_area(rect_min, rect_max)
-    var new_selection = unit_manager.get_selected_units()
-    print("New selection: ", new_selection)
-    var new_selection_array = []
-    for i in range(Config.UNIT_TYPES_LEN):
-        new_selection_array.append([])
-    for i in range(0, new_selection.size(), 2):
-        new_selection_array[new_selection[i]].append(new_selection[i + 1])
-    print("New selection array: ", new_selection_array)
-    for t_type in range(new_selection_array.size()):
-        emit_signal("selection_changed", t_type, new_selection_array[t_type])

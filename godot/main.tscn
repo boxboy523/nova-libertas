@@ -36,7 +36,7 @@ metadata/_edit_vertical_guides_ = [-223.0]
 multimesh = SubResource("MultiMesh_0xm2m")
 texture = SubResource("GradientTexture2D_h2yge")
 script = ExtResource("2_1bvp3")
-thing_type_num = 1
+thing_type = 1
 unit_manager = NodePath("../UnitManager")
 debug_draw = true
 debug_color = Color(0, 0, 1, 1)
@@ -58,4 +58,5 @@ map_csv_path = "res://res/map.csv"
 [node name="DragNode" type="Node2D" parent="." unique_id=807051699]
 script = ExtResource("3_h2yge")
 
-[connection signal="selection_changed" from="DragNode" to="MultiMeshUnit" method="_on_drag_node_selection_changed"]
+[connection signal="selection_changed" from="UnitManager" to="MultiMeshUnit" method="_on_unit_manager_selection_changed"]
+[connection signal="t_type_changed" from="UnitManager" to="MultiMeshUnit" method="_on_unit_manager_t_type_changed"]

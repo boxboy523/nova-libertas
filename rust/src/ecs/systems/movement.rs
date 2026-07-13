@@ -15,6 +15,9 @@ const STOP_DELAY: f32 = 0.5; // 명령 완료 후 유닛이 멈추기까지의 �
 const STOP_COL_MARGIN: f32 = 5.0; // 명령 완료한 유닛과 충돌 판정 시 마진
 const WALL_PUSH_FACTOR: f32 = 0.1; // 벽과 충돌 시 이동 방향을 얼마나 밀어낼지 결정하는 계수
 
+const MOVING_RESP: f32 = 0.5;
+const STOP_RESP: f32 = 2.0;
+
 // 유닛 이동 시스템: UnitMovement 컴포넌트를 가진 엔티티를 이동시키는 시스템
 pub fn apply_move_system(
     mut query: Query<(Entity, &mut Transform, &mut UnitMovement)>,
@@ -227,7 +230,11 @@ pub fn avoid_system(
                         y: velocity.y,
                     },
                     radius: transform.size,
-                    avoidance_responsibility: 1.0,
+                    avoidance_responsibility: if movement.moving {
+                        MOVING_RESP
+                    } else {
+                        STOP_RESP
+                    },
                 },
             )
         })
@@ -246,7 +253,11 @@ pub fn avoid_system(
                     y: velocity.y,
                 },
                 radius: transform.size,
-                avoidance_responsibility: 1.0,
+                avoidance_responsibility: if movement.moving {
+                    MOVING_RESP
+                } else {
+                    STOP_RESP
+                },
             };
             let neighbor_entities = spatial_grid
                 .query_entities(transform.position, transform.size + SEARCH_RADIUS)
@@ -267,7 +278,7 @@ pub fn avoid_system(
                     x: velocity.x,
                     y: velocity.y,
                 },
-                movement.speed.max(movement.max_speed * 0.3),
+                movement.max_speed,
                 time.delta,
                 &AvoidanceOptions {
                     obstacle_margin: 0.0,

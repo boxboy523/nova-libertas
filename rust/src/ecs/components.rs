@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
 use godot::prelude::*;
+use strum::EnumIter;
 
 #[derive(Component, Clone, Copy)]
 pub struct Transform {
@@ -49,3 +50,10 @@ pub struct DelayedStopTrigger {
 
 #[derive(Component)]
 pub struct Selected; // 유닛이 선택되었는지 여부
+
+#[derive(Component, GodotConvert, Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+#[godot(via = i32)]
+pub enum Team {
+    Player,
+    Enemy,
+}
