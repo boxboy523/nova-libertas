@@ -1,12 +1,13 @@
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
-use godot::{global::godot_print, meta::GodotConvert};
+use godot::prelude::*;
 use std::collections::HashMap;
 use strum::EnumIter;
 
-#[derive(GodotConvert, Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
+#[derive(GodotConvert, Var, Export, Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, Default)]
 #[godot(via = i64)]
 pub enum ThingType {
+    #[default]
     Test,
     Wall,
 }

@@ -11,18 +11,18 @@ use strum::IntoEnumIterator;
 const CELL_SIZE: f32 = 40.0;
 
 #[derive(GodotClass)]
-#[class(base=Node)]
+#[class(base=Node2D)]
 pub struct UnitManager {
     world: World,
     schedule: Schedule,
-    base: Base<Node>,
+    base: Base<Node2D>,
     #[export]
     map_csv_path: GString,
 }
 
 #[godot_api]
-impl INode for UnitManager {
-    fn init(base: Base<Node>) -> Self {
+impl INode2D for UnitManager {
+    fn init(base: Base<Node2D>) -> Self {
         Self {
             world: World::new(),
             schedule: Schedule::default(),
@@ -116,6 +116,19 @@ impl INode for UnitManager {
         self.world.resource_mut::<Time>().delta = delta as f32;
         self.schedule.run(&mut self.world);
     }
+
+    fn draw(&mut self) {
+        let select_draw_call = self
+            .world
+            .query_filtered::<&Transform, (With<UnitMovement>, With<Selected>)>()
+            .iter(&self.world)
+            .map(|t| (t.position, t.size))
+            .collect::<Vec<_>>();
+        for (pos, size) in select_draw_call {
+            self.base_mut()
+                .draw_circle(pos, size + 20.0, Color::from_rgba(0.0, 1.0, 0.0, 1.0));
+        }
+    }
 }
 
 #[godot_api]
@@ -126,9 +139,16 @@ impl UnitManager {
     #[signal]
     pub fn t_type_changed(thing_type: i64, indices: PackedInt32Array, team: PackedInt32Array);
 
+    pub fn get_transform_buf(&self, t_type: ThingType) -> Option<&[f32]> {
+        let transform_buffer = self.world.resource::<TransformBuffer>();
+        transform_buffer
+            .get_buffer(t_type)
+            .map(|buf| buf.as_slice())
+    }
+
     #[func]
-    pub fn update_multimesh_buffer(&mut self, t_type: ThingType, mut multimesh: Gd<MultiMesh>) {
-        let transform_buffer = self.world.resource_mut::<TransformBuffer>();
+    pub fn update_multimesh_buffer(&self, t_type: ThingType, mut multimesh: Gd<MultiMesh>) {
+        let transform_buffer = self.world.resource::<TransformBuffer>();
         let Some(buffer) = transform_buffer.get_buffer(t_type) else {
             godot_error!("TransformBuffer: ThingType {:?} not found", t_type);
             return;
