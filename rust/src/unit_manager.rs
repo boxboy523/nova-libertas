@@ -67,11 +67,10 @@ impl INode2D for UnitManager {
                         (i % 10) as f32 * 40.0 + 50.0,
                         (i / 10) as f32 * 40.0 + 50.0,
                     ),
-                    rotation: 0.0,
-                    scale: Vector2::new(1.0, 1.0),
-                    size: 10.0,
-                    buffer_index: 0,
+                    scale: Vector2::new(-1.0, 1.0),
+                    size: 15.0,
                     t_type: ThingType::Test,
+                    ..Default::default()
                 },
                 stats: UnitMovement {
                     speed: 0.0,
@@ -115,6 +114,7 @@ impl INode2D for UnitManager {
     fn physics_process(&mut self, delta: f64) {
         self.world.resource_mut::<Time>().delta = delta as f32;
         self.schedule.run(&mut self.world);
+        self.base_mut().queue_redraw();
     }
 
     fn draw(&mut self) {
@@ -126,7 +126,7 @@ impl INode2D for UnitManager {
             .collect::<Vec<_>>();
         for (pos, size) in select_draw_call {
             self.base_mut()
-                .draw_circle(pos, size + 20.0, Color::from_rgba(0.0, 1.0, 0.0, 1.0));
+                .draw_circle(pos, size + 5.0, Color::from_rgba(0.0, 1.0, 0.0, 1.0));
         }
     }
 }
@@ -139,11 +139,35 @@ impl UnitManager {
     #[signal]
     pub fn t_type_changed(thing_type: i64, indices: PackedInt32Array, team: PackedInt32Array);
 
-    pub fn get_transform_buf(&self, t_type: ThingType) -> Option<&[f32]> {
+    pub fn get_transform_buf(
+        &self,
+        t_type: ThingType,
+        y_sorted: bool,
+    ) -> Option<PackedFloat32Array> {
         let transform_buffer = self.world.resource::<TransformBuffer>();
-        transform_buffer
+        let buf = transform_buffer
             .get_buffer(t_type)
-            .map(|buf| buf.as_slice())
+            .map(|buf| buf.as_slice());
+        if y_sorted {
+            if let Some(buf) = buf {
+                let n = buf.len() / STRIDE;
+                let mut order: Vec<usize> = (0..n).collect();
+                order.sort_unstable_by(|&i, &j| {
+                    let y_i = buf[i * STRIDE + 7];
+                    let y_j = buf[j * STRIDE + 7];
+                    y_i.partial_cmp(&y_j).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                let mut sorted_buf = Vec::with_capacity(buf.len());
+                for &i in &order {
+                    sorted_buf.extend_from_slice(&buf[i * STRIDE..(i + 1) * STRIDE]);
+                }
+                Some(PackedFloat32Array::from(sorted_buf.as_slice()))
+            } else {
+                None
+            }
+        } else {
+            buf.map(|buf| PackedFloat32Array::from(buf))
+        }
     }
 
     #[func]

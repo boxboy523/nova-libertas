@@ -3,11 +3,11 @@ use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
 pub fn transform_update_system(
-    query: Query<&Transform, Changed<Transform>>,
+    query: Query<(&Transform, Option<&UnitMovement>, Option<&Team>), Changed<Transform>>,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    query.iter().for_each(|transform| {
-        buffer.update(*transform);
+    query.iter().for_each(|(transform, movement, team)| {
+        buffer.update(*transform, movement.map(|m| m.preferred_dir), team.copied());
     });
 }
 

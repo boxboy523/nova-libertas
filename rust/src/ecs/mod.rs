@@ -12,8 +12,10 @@ pub mod prelude {
         MoveOrderEvent, SpawnUnitEvent, SpawnWallEvent,
     };
     pub use crate::ecs::resources::{
-        flow_grid::FlowGrid, spatial_grid::CollisionResult, spatial_grid::SpatialGrid,
-        transform_buffer::ThingType, transform_buffer::TransformBuffer, Time,
+        flow_grid::FlowGrid,
+        spatial_grid::{CollisionResult, SpatialGrid},
+        transform_buffer::{ThingType, TransformBuffer, STRIDE},
+        Time,
     };
     pub use crate::ecs::systems::{
         framework::{despawn_units_system, transform_update_system},

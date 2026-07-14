@@ -5,7 +5,7 @@ use bevy_ecs::prelude::*;
 use godot::prelude::*;
 use strum::EnumIter;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Default)]
 pub struct Transform {
     pub position: Vector2,
     pub rotation: f32,
@@ -15,7 +15,7 @@ pub struct Transform {
     pub t_type: ThingType,   // 유닛의 종류 (ThingType)
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct UnitMovement {
     pub speed: f32,
     pub max_speed: f32,
@@ -26,34 +26,36 @@ pub struct UnitMovement {
     pub dist_target_sq: f32, // 목표 지점과의 직선거리 제곱
 }
 
-#[derive(Component)]
+#[derive(Component, Debug, Default)]
 pub struct Dead; // 유닛이 죽었는지 여부
 
-#[derive(Component)]
+#[derive(Component, Debug, Default)]
 pub struct MoveOrder {
     pub target: Vector2,
     pub followers: HashSet<Entity>, // 이 명령을 따르는 유닛들
     pub following: HashSet<Entity>, // 이 명령을 따르는 유닛들 중 현재 따라가는 유닛들
 }
 
-#[derive(Component)]
+#[derive(Component, Debug, Default)]
 pub struct FlowField {
     pub goal: Vector2,
     pub field: Vec<Option<Vector2>>,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct DelayedStopTrigger {
     pub timer: f32,
     pub order: Entity, // 이 트리거를 생성한 MoveOrder 엔티티
 }
 
-#[derive(Component)]
+#[derive(Component, Debug, Default)]
 pub struct Selected; // 유닛이 선택되었는지 여부
 
-#[derive(Component, GodotConvert, Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+#[derive(Component, GodotConvert, Debug, Default, Clone, Copy, PartialEq, Eq, EnumIter)]
 #[godot(via = i32)]
 pub enum Team {
     Player,
     Enemy,
+    #[default]
+    Neutral,
 }

@@ -17,7 +17,12 @@ pub fn spawn_units_trigger(
     mut buffer: ResMut<TransformBuffer>,
 ) {
     let e = commands.spawn((event.stats, event.team)).id();
-    let transform = buffer.add(event.transform, e);
+    let transform = buffer.add(
+        event.transform,
+        Some(event.stats.dir_vec),
+        Some(event.team),
+        e,
+    );
     commands.entity(e).insert(transform);
 }
 
@@ -85,12 +90,13 @@ pub fn spawn_wall_trigger(
     let transform = buffer.add(
         Transform {
             position: event.position,
-            rotation: 0.0,
             scale: Vector2::new(1.0, 1.0), // 벽의 스케일은 필요에 따라 조정
             size: event.size.x.max(event.size.y) / 2.0, // 벽의 크기에 따라 size 설정
-            buffer_index: 0,               // 초기값, TransformBuffer에서 할당 후 업데이트
             t_type: ThingType::Wall,
+            ..Default::default()
         },
+        None,
+        None,
         e,
     );
     commands.entity(e).insert(transform);
