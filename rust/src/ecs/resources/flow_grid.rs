@@ -69,18 +69,26 @@ impl FlowGrid {
             .field
             .get(base_y * self.width + base_x)
             .and_then(|v| v.to_owned());
-        let v10 = flow_field
-            .field
-            .get(base_y * self.width + (base_x + 1))
-            .and_then(|v| v.to_owned());
+        let v10 = if (base_x + 1) >= self.width {
+            None
+        } else {
+            flow_field
+                .field
+                .get(base_y * self.width + (base_x + 1))
+                .and_then(|v| v.to_owned())
+        };
         let v01 = flow_field
             .field
             .get((base_y + 1) * self.width + base_x)
             .and_then(|v| v.to_owned());
-        let v11 = flow_field
-            .field
-            .get((base_y + 1) * self.width + (base_x + 1))
-            .and_then(|v| v.to_owned());
+        let v11 = if (base_x + 1) >= self.width {
+            None
+        } else {
+            flow_field
+                .field
+                .get((base_y + 1) * self.width + (base_x + 1))
+                .and_then(|v| v.to_owned())
+        };
         let mut total = Vector2::ZERO;
         let mut weight = 0.0;
 

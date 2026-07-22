@@ -7,7 +7,7 @@ use godot::prelude::*;
 #[derive(Event)]
 pub struct SpawnUnitEvent {
     pub transform: Transform,
-    pub stats: UnitMovement,
+    pub stats: UnitStats,
     pub team: Team,
 }
 
@@ -16,13 +16,22 @@ pub fn spawn_units_trigger(
     mut commands: Commands,
     mut buffer: ResMut<TransformBuffer>,
 ) {
-    let e = commands.spawn((event.stats, event.team)).id();
-    let transform = buffer.add(
-        event.transform,
-        Some(event.stats.dir_vec),
-        Some(event.team),
-        e,
-    );
+    let e = commands
+        .spawn((
+            event.stats,
+            event.team,
+            Stopped {
+                stop_position: event.transform.position,
+                in_range: true,
+                ..Default::default()
+            },
+            UnitMovement {
+                ..Default::default()
+            },
+            UnitHp(event.stats.max_hp),
+        ))
+        .id();
+    let transform = buffer.add(event.transform, Some(Vector2::ZERO), Some(event.team), e);
     commands.entity(e).insert(transform);
 }
 
@@ -40,18 +49,29 @@ pub fn move_order_trigger(
     for mut order in query.iter_mut() {
         order.followers.retain(|e| !event.units.contains(e));
         order.following.retain(|e| !event.units.contains(e));
+        order.finished.retain(|e| !event.units.contains(e));
     }
-    commands.spawn((
-        MoveOrder {
-            target: event.target_position,
-            followers: event.units.clone(),
-            following: event.units.clone(),
-        },
-        FlowField {
-            field: Vec::new(),
-            goal: event.target_position,
-        },
-    ));
+    let new_order = commands
+        .spawn((
+            MoveOrder {
+                target: event.target_position,
+                followers: event.units.clone(),
+                following: event.units.clone(),
+                finished: HashSet::new(),
+            },
+            FlowField {
+                field: Vec::new(),
+                goal: event.target_position,
+            },
+        ))
+        .id();
+    event.units.iter().for_each(|&unit| {
+        commands.entity(unit).insert(Moving {
+            order: new_order,
+            dist_target_sq: f32::MAX, // 초기값으로 큰 값을 설정
+        });
+        commands.entity(unit).remove::<Stopped>();
+    });
 }
 
 pub fn despawn_order_trigger(
@@ -59,17 +79,22 @@ pub fn despawn_order_trigger(
     mut commands: Commands,
     query_order: Query<&MoveOrder>,
     triggered: Query<&DelayedStopTrigger>,
-    mut query_movement: Query<&mut UnitMovement>,
+    query_transform: Query<&Transform>,
 ) {
     if let Ok(order) = query_order.get(remove.entity) {
         for e in &order.followers {
             if triggered.contains(*e) {
+                let Ok(transform) = query_transform.get(*e) else {
+                    godot_warn!("Failed to get transform for entity {:?}", e);
+                    continue;
+                };
                 commands.entity(*e).remove::<DelayedStopTrigger>();
-            }
-            if let Ok(mut movement) = query_movement.get_mut(*e) {
-                movement.moving = false;
-                movement.dist_target_sq = f32::MAX;
-                movement.dir_vec = Vector2::ZERO;
+                commands.entity(*e).remove::<Moving>();
+                commands.entity(*e).insert(Stopped {
+                    stop_position: transform.position,
+                    in_range: true,
+                    ..Default::default()
+                });
             }
         }
     }

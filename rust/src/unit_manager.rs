@@ -61,25 +61,20 @@ impl INode2D for UnitManager {
 
         // 테스트용 유닛 2,000개 일괄 생성 (가로 50줄, 세로 40줄)
         for i in 0..30 {
+            let position =
+                Vector2::new((i % 10) as f32 * 40.0 + 50.0, (i / 10) as f32 * 40.0 + 50.0);
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
-                    position: Vector2::new(
-                        (i % 10) as f32 * 40.0 + 50.0,
-                        (i / 10) as f32 * 40.0 + 50.0,
-                    ),
+                    position,
                     scale: Vector2::new(-1.0, 1.0),
                     size: 15.0,
                     t_type: ThingType::Test,
                     ..Default::default()
                 },
-                stats: UnitMovement {
-                    speed: 0.0,
+                stats: UnitStats {
                     max_speed: 100.0,
                     acceleration: 200.0,
-                    moving: false,
-                    dir_vec: Vector2::ZERO,
-                    preferred_dir: Vector2::ZERO,
-                    dist_target_sq: f32::MAX,
+                    max_hp: 100.0,
                 },
                 team: if i % 2 == 0 {
                     Team::Player
@@ -95,9 +90,11 @@ impl INode2D for UnitManager {
         self.schedule.add_systems(update_spatial_grid_system);
         self.schedule.add_systems(acceleration_system);
         self.schedule.add_systems(delayed_stop_system);
+        self.schedule.add_systems(stop_unit_system);
         self.schedule.add_systems(
             (
                 flow_movement_system,
+                stopped_in_range_system,
                 avoid_system,
                 smooth_wall_passing_system,
                 apply_move_system,
@@ -168,27 +165,6 @@ impl UnitManager {
         } else {
             buf.map(|buf| PackedFloat32Array::from(buf))
         }
-    }
-
-    #[func]
-    pub fn update_multimesh_buffer(&self, t_type: ThingType, mut multimesh: Gd<MultiMesh>) {
-        let transform_buffer = self.world.resource::<TransformBuffer>();
-        let Some(buffer) = transform_buffer.get_buffer(t_type) else {
-            godot_error!("TransformBuffer: ThingType {:?} not found", t_type);
-            return;
-        };
-        if (buffer.len() / 8) != (multimesh.get_instance_count() as usize) {
-            multimesh.set_instance_count((buffer.len() / 8) as i32);
-        }
-        let buffer = PackedFloat32Array::from(buffer[..buffer.len()].as_ref());
-
-        // 고도 엔진의 렌더링 서버에 메모리 블록 통째로 덮어쓰기
-        multimesh.set_buffer(&buffer);
-    }
-
-    #[func]
-    pub fn get_unit_count(&self) -> i32 {
-        (self.world.resource::<TransformBuffer>().data.len() / 8) as i32
     }
 
     #[func]
