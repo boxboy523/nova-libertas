@@ -2,12 +2,22 @@
 
 [ext_resource type="Script" uid="uid://cwhnahy22yfbi" path="res://scripts/main.gd" id="1_ig7tw"]
 [ext_resource type="Texture2D" uid="uid://dwxvb8dhoej0d" path="res://res/material/astrape.png" id="3_1bvp3"]
+[ext_resource type="Shader" uid="uid://blgpli8bfbqxq" path="res://shader/hp_bar.gdshader" id="3_7mycd"]
 [ext_resource type="Script" uid="uid://b8pfral8hxmlq" path="res://scripts/drag.gd" id="3_h2yge"]
-[ext_resource type="Shader" uid="uid://bybvrhkaerqum" path="res://base.gdshader" id="3_lquwl"]
+[ext_resource type="Shader" uid="uid://bybvrhkaerqum" path="res://shader/base.gdshader" id="3_lquwl"]
 [ext_resource type="Texture2D" uid="uid://cowu6yeqkrass" path="res://res/material/Brick_wall_old.jpg" id="5_7mycd"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_272bh"]
 size = Vector2(170, 170)
+
+[sub_resource type="Gradient" id="Gradient_272bh"]
+colors = PackedColorArray(0, 1, 0, 1, 0, 1, 0, 1)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_7tfuo"]
+gradient = SubResource("Gradient_272bh")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_urs34"]
+shader = ExtResource("3_7mycd")
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_7mycd"]
 shader = ExtResource("3_lquwl")
@@ -35,6 +45,8 @@ script = ExtResource("3_h2yge")
 unit_manager = NodePath("../UnitManager")
 mesh = SubResource("QuadMesh_272bh")
 y_sorted = true
+hp_texture = SubResource("GradientTexture1D_7tfuo")
+hp_shader = SubResource("ShaderMaterial_urs34")
 material = SubResource("ShaderMaterial_7mycd")
 texture = ExtResource("3_1bvp3")
 

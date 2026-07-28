@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
 use godot::prelude::*;
@@ -23,6 +21,13 @@ pub struct UnitStats {
 }
 
 #[derive(Component, Debug, Clone, Copy)]
+pub struct UnitBattleStats {
+    pub attack_range: f32,
+    pub attack_damage: f32,
+    pub attack_cooldown: f32,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
 pub struct UnitHp(pub f32); // 유닛의 현재 체력
 
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -39,22 +44,33 @@ pub struct Moving {
     pub dist_target_sq: f32, // 목표 지점과의 직선거리 제곱
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Attacking {
+    pub order: Entity,       // 이 유닛이 따르는 AttackOrder 엔티티
+    pub cooldown: f32,       // 공격 쿨다운 시간 (초)
+    pub dist_target_sq: f32, // 목표 지점과의 직선거리 제곱
+}
+
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct Stopped {
-    pub stop_position: Vector2, // 유닛이 멈춘 위치
-    pub in_range: bool,         // stop_position과 범위 안에 있는지 여부
-    pub pos_renew_delay: f32,   // stop_position 갱신 지연 시간 (초)
+    pub stop_position: Vector2,     // 유닛이 멈춘 위치
+    pub in_range: bool,             // stop_position과 범위 안에 있는지 여부
+    pub pos_renew_delay: f32,       // stop_position 갱신 지연 시간 (초)
+    pub last_order: Option<Entity>, // 마지막으로 따랐던 MoveOrder 엔티티
 }
 
 #[derive(Component, Debug, Default)]
 pub struct Dead; // 유닛이 죽었는지 여부
 
-#[derive(Component, Debug, Default)]
+#[derive(Component, Debug)]
 pub struct MoveOrder {
     pub target: Vector2,
-    pub followers: HashSet<Entity>, // 이 명령을 따르는 유닛들
-    pub following: HashSet<Entity>, // 이 명령을 따르는 유닛들 중 현재 따라가는 유닛들
-    pub finished: HashSet<Entity>,  // 이 명령을 완료한 유닛들
+}
+
+#[derive(Component, Debug)]
+pub struct AttackOrder {
+    pub target: Entity,
+    pub last_unit_pos: Vector2, // 마지막으로 공격 대상 유닛이 있었던 위치
 }
 
 #[derive(Component, Debug, Default)]

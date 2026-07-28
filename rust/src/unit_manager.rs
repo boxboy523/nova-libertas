@@ -2,10 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
-use godot::{
-    classes::{MultiMesh, ProjectSettings},
-    prelude::*,
-};
+use godot::{classes::ProjectSettings, prelude::*};
 use strum::IntoEnumIterator;
 
 const CELL_SIZE: f32 = 40.0;
@@ -47,6 +44,8 @@ impl INode2D for UnitManager {
         self.world.add_observer(move_order_trigger);
         self.world.add_observer(spawn_wall_trigger);
         self.world.add_observer(despawn_order_trigger);
+        self.world.add_observer(attack_order_trigger);
+        self.world.add_observer(damage_trigger);
 
         for y in 0..map_height {
             for x in 0..map_width {
@@ -71,16 +70,12 @@ impl INode2D for UnitManager {
                     t_type: ThingType::Test,
                     ..Default::default()
                 },
-                stats: UnitStats {
-                    max_speed: 100.0,
-                    acceleration: 200.0,
-                    max_hp: 100.0,
-                },
                 team: if i % 2 == 0 {
                     Team::Player
                 } else {
                     Team::Enemy
                 },
+                hp: 100.0,
             });
         }
 
@@ -91,10 +86,13 @@ impl INode2D for UnitManager {
         self.schedule.add_systems(acceleration_system);
         self.schedule.add_systems(delayed_stop_system);
         self.schedule.add_systems(stop_unit_system);
+        self.schedule.add_systems(remove_empty_orders_system);
         self.schedule.add_systems(
             (
                 flow_movement_system,
                 stopped_in_range_system,
+                move_or_attack_system,
+                attack_system,
                 avoid_system,
                 smooth_wall_passing_system,
                 apply_move_system,
@@ -140,30 +138,48 @@ impl UnitManager {
         &self,
         t_type: ThingType,
         y_sorted: bool,
-    ) -> Option<PackedFloat32Array> {
+    ) -> (Option<PackedFloat32Array>, Option<PackedFloat32Array>) {
         let transform_buffer = self.world.resource::<TransformBuffer>();
-        let buf = transform_buffer
-            .get_buffer(t_type)
-            .map(|buf| buf.as_slice());
+        let buf = transform_buffer.get_buffer(t_type);
         if y_sorted {
             if let Some(buf) = buf {
-                let n = buf.len() / STRIDE;
+                let n = buf.objects.len() / STRIDE;
                 let mut order: Vec<usize> = (0..n).collect();
                 order.sort_unstable_by(|&i, &j| {
-                    let y_i = buf[i * STRIDE + 7];
-                    let y_j = buf[j * STRIDE + 7];
+                    let y_i = buf.objects[i * STRIDE + 7];
+                    let y_j = buf.objects[j * STRIDE + 7];
                     y_i.partial_cmp(&y_j).unwrap_or(std::cmp::Ordering::Equal)
                 });
-                let mut sorted_buf = Vec::with_capacity(buf.len());
+                let mut sorted_buf = Vec::with_capacity(buf.objects.len());
                 for &i in &order {
-                    sorted_buf.extend_from_slice(&buf[i * STRIDE..(i + 1) * STRIDE]);
+                    sorted_buf.extend_from_slice(&buf.objects[i * STRIDE..(i + 1) * STRIDE]);
                 }
-                Some(PackedFloat32Array::from(sorted_buf.as_slice()))
+                let sorted_buf_hp = if let Some(buf_hp) = buf.hp_bars.as_ref() {
+                    let mut sorted_buf_hp = Vec::with_capacity(buf_hp.len());
+                    for &i in &order {
+                        sorted_buf_hp.extend_from_slice(&buf_hp[i * STRIDE..(i + 1) * STRIDE]);
+                    }
+                    Some(PackedFloat32Array::from(sorted_buf_hp.as_slice()))
+                } else {
+                    None
+                };
+                (
+                    Some(PackedFloat32Array::from(sorted_buf.as_slice())),
+                    sorted_buf_hp,
+                )
             } else {
-                None
+                (None, None)
             }
         } else {
-            buf.map(|buf| PackedFloat32Array::from(buf))
+            (
+                buf.map(|b| PackedFloat32Array::from(b.objects.as_slice())),
+                buf.map(|b| {
+                    b.hp_bars
+                        .as_ref()
+                        .map(|hp| PackedFloat32Array::from(hp.as_slice()))
+                })
+                .flatten(),
+            )
         }
     }
 
@@ -178,6 +194,36 @@ impl UnitManager {
             target_position: target,
             units,
         });
+    }
+
+    #[func]
+    pub fn order_attack(&mut self, target_pos: Vector2) {
+        let units = self
+            .world
+            .query_filtered::<Entity, (With<Transform>, With<UnitMovement>, With<Selected>)>()
+            .iter(&self.world)
+            .collect::<HashSet<_>>();
+        let spatial_grid = self.world.resource::<SpatialGrid>();
+        let mut target_entities = match spatial_grid.query_entities(target_pos, 1.0) {
+            Ok(entities) => entities,
+            Err(_) => {
+                godot_error!("SpatialGrid query failed at position {:?}", target_pos);
+                return;
+            }
+        };
+        target_entities.sort_unstable_by(|a, b| {
+            (target_pos - a.pos)
+                .length_squared()
+                .total_cmp(&(target_pos - b.pos).length_squared())
+        });
+        if let Some(target_entity) = target_entities.first() {
+            self.world.trigger(AttackOrderEvent {
+                target: target_entity.entity,
+                units,
+            });
+        } else {
+            godot_warn!("No target entity found at position {:?}", target_pos);
+        }
     }
 
     #[func]

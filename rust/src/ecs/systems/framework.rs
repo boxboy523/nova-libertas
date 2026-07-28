@@ -4,10 +4,14 @@ use godot::prelude::*;
 
 pub fn transform_update_system(
     query: Query<(&Transform, Option<&UnitMovement>, Option<&Team>), Changed<Transform>>,
+    query_hp: Query<(&Transform, &UnitHp, &UnitStats), Or<(Changed<UnitHp>, Changed<Transform>)>>,
     mut buffer: ResMut<TransformBuffer>,
 ) {
     query.iter().for_each(|(transform, movement, team)| {
         buffer.update(*transform, movement.map(|m| m.preferred_dir), team.copied());
+    });
+    query_hp.iter().for_each(|(transform, hp, stats)| {
+        buffer.update_hp(*transform, hp.0 / stats.max_hp);
     });
 }
 

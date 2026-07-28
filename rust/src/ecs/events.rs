@@ -7,8 +7,8 @@ use godot::prelude::*;
 #[derive(Event)]
 pub struct SpawnUnitEvent {
     pub transform: Transform,
-    pub stats: UnitStats,
     pub team: Team,
+    pub hp: f32, // 유닛의 초기 체력
 }
 
 pub fn spawn_units_trigger(
@@ -16,9 +16,17 @@ pub fn spawn_units_trigger(
     mut commands: Commands,
     mut buffer: ResMut<TransformBuffer>,
 ) {
+    let Some(stats) = event.transform.t_type.get_unitstats() else {
+        return;
+    };
+    let Some(battle_stats) = event.transform.t_type.get_unit_battle_stats() else {
+        return;
+    };
     let e = commands
         .spawn((
-            event.stats,
+            event.transform,
+            stats,
+            battle_stats,
             event.team,
             Stopped {
                 stop_position: event.transform.position,
@@ -28,10 +36,16 @@ pub fn spawn_units_trigger(
             UnitMovement {
                 ..Default::default()
             },
-            UnitHp(event.stats.max_hp),
+            UnitHp(event.hp),
         ))
         .id();
-    let transform = buffer.add(event.transform, Some(Vector2::ZERO), Some(event.team), e);
+    let transform = buffer.add(
+        event.transform,
+        Some(Vector2::ZERO),
+        Some(event.team),
+        e,
+        Some(event.hp / stats.max_hp),
+    );
     commands.entity(e).insert(transform);
 }
 
@@ -41,23 +55,11 @@ pub struct MoveOrderEvent {
     pub units: HashSet<Entity>, // 명령을 받을 유닛들
 }
 
-pub fn move_order_trigger(
-    event: On<MoveOrderEvent>,
-    mut commands: Commands,
-    mut query: Query<&mut MoveOrder>,
-) {
-    for mut order in query.iter_mut() {
-        order.followers.retain(|e| !event.units.contains(e));
-        order.following.retain(|e| !event.units.contains(e));
-        order.finished.retain(|e| !event.units.contains(e));
-    }
+pub fn move_order_trigger(event: On<MoveOrderEvent>, mut commands: Commands) {
     let new_order = commands
         .spawn((
             MoveOrder {
                 target: event.target_position,
-                followers: event.units.clone(),
-                following: event.units.clone(),
-                finished: HashSet::new(),
             },
             FlowField {
                 field: Vec::new(),
@@ -70,34 +72,77 @@ pub fn move_order_trigger(
             order: new_order,
             dist_target_sq: f32::MAX, // 초기값으로 큰 값을 설정
         });
+        commands.entity(unit).remove::<DelayedStopTrigger>();
         commands.entity(unit).remove::<Stopped>();
+        commands.entity(unit).remove::<Attacking>();
+    });
+}
+
+#[derive(Event)]
+pub struct AttackOrderEvent {
+    pub target: Entity,
+    pub units: HashSet<Entity>, // 명령을 받을 유닛들
+}
+
+pub fn attack_order_trigger(
+    event: On<AttackOrderEvent>,
+    mut commands: Commands,
+    query: Query<&Transform>,
+) {
+    godot_print!("AttackOrderEvent received for target: {:?}", event.target);
+    let last_pos = if let Ok(transform) = query.get(event.target) {
+        transform.position
+    } else {
+        Vector2::ZERO // 대상이 존재하지 않으면 기본값으로 Vector2::ZERO 사용
+    };
+    let new_order = commands
+        .spawn((
+            AttackOrder {
+                target: event.target,
+                last_unit_pos: last_pos,
+            },
+            FlowField {
+                field: Vec::new(),
+                goal: Vector2::ZERO, // 공격 명령의 경우 목표 위치는 필요하지 않음
+            },
+        ))
+        .id();
+    event.units.iter().for_each(|&unit| {
+        commands.entity(unit).insert(Moving {
+            order: new_order,
+            dist_target_sq: f32::MAX, // 초기값으로 큰 값을 설정
+        });
+        commands.entity(unit).remove::<DelayedStopTrigger>();
+        commands.entity(unit).remove::<Stopped>();
+        commands.entity(unit).remove::<Attacking>();
     });
 }
 
 pub fn despawn_order_trigger(
-    remove: On<Remove, MoveOrder>,
+    remove: On<Remove, (MoveOrder, AttackOrder)>,
     mut commands: Commands,
-    query_order: Query<&MoveOrder>,
     triggered: Query<&DelayedStopTrigger>,
-    query_transform: Query<&Transform>,
+    query: Query<(Entity, &Transform, Option<&Moving>, Option<&Attacking>)>,
 ) {
-    if let Ok(order) = query_order.get(remove.entity) {
-        for e in &order.followers {
-            if triggered.contains(*e) {
-                let Ok(transform) = query_transform.get(*e) else {
-                    godot_warn!("Failed to get transform for entity {:?}", e);
-                    continue;
-                };
-                commands.entity(*e).remove::<DelayedStopTrigger>();
-                commands.entity(*e).remove::<Moving>();
-                commands.entity(*e).insert(Stopped {
-                    stop_position: transform.position,
-                    in_range: true,
-                    ..Default::default()
-                });
+    query
+        .iter()
+        .filter(|(_, _, moving, attacking)| {
+            moving.map_or(false, |m| m.order == remove.entity)
+                || attacking.map_or(false, |a| a.order == remove.entity)
+        })
+        .for_each(|(entity, transform, _, _)| {
+            commands.entity(entity).remove::<Moving>();
+            commands.entity(entity).remove::<Attacking>();
+            if triggered.contains(entity) {
+                commands.entity(entity).remove::<DelayedStopTrigger>();
             }
-        }
-    }
+            commands.entity(entity).insert(Stopped {
+                stop_position: transform.position,
+                in_range: true,
+                pos_renew_delay: 0.0,
+                last_order: Some(remove.entity),
+            });
+        });
 }
 
 #[derive(Event)]
@@ -123,6 +168,30 @@ pub fn spawn_wall_trigger(
         None,
         None,
         e,
+        None,
     );
     commands.entity(e).insert(transform);
+}
+
+#[derive(Event)]
+pub struct DamageEvent {
+    pub sender: Entity,
+    pub receiver: Entity,
+    pub damage: f32,
+}
+
+pub fn damage_trigger(
+    event: On<DamageEvent>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut UnitHp)>,
+) {
+    if let Ok((_, mut hp)) = query.get_mut(event.receiver) {
+        hp.0 -= event.damage;
+        if hp.0 <= 0.0 {
+            commands.entity(event.receiver).insert(Dead);
+            commands.entity(event.receiver).remove::<Moving>();
+            commands.entity(event.receiver).remove::<Attacking>();
+            commands.entity(event.receiver).remove::<Stopped>();
+        }
+    }
 }

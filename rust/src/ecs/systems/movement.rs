@@ -4,7 +4,7 @@ use crate::ecs::prelude::*;
 use bevy_ecs::prelude::*;
 use dodgy_2d::{Agent, AvoidanceOptions};
 use godot::prelude::*;
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
 const ORDER_MARGIN: f32 = 10.0; // 유닛이 목표 지점에 도달했다고 간주하는 거리
 const NEAR_TARGET_MARGIN: f32 = 60.0; // 유닛이 목표 지점 근처에 있다고 간주하는 거리
@@ -117,62 +117,49 @@ pub fn smooth_wall_passing_system(
 
 // 명령 처리 시스템: 명령을 받은 유닛들을 FlowField를 따라 방향을 업데이트하는 시스템
 pub fn flow_movement_system(
-    mut commands: Commands,
     mut query: Query<(&Transform, &mut UnitMovement, &mut Moving)>,
-    orders: Query<(Entity, &FlowField, &MoveOrder)>,
-    triggered: Query<&DelayedStopTrigger>,
+    move_orders: Query<(&FlowField, &MoveOrder), Without<AttackOrder>>,
+    attack_orders: Query<(&FlowField, &AttackOrder), Without<MoveOrder>>,
     flow_grid: Res<FlowGrid>,
-    spatial_grid: Res<SpatialGrid>,
 ) {
-    let margin_squared = ORDER_MARGIN * ORDER_MARGIN; // 거리 비교를 위한 제곱값
     let near_target_margin_squared = NEAR_TARGET_MARGIN * NEAR_TARGET_MARGIN;
-    orders.iter().for_each(|(entity, flow_field, order)| {
-        order.following.iter().for_each(|&unit_entity| {
-            if let Ok((transform, mut movement, mut moving)) = query.get_mut(unit_entity) {
-                moving.dist_target_sq = transform.position.distance_squared_to(order.target);
-                movement.preferred_dir = if moving.dist_target_sq < near_target_margin_squared {
-                    // 목표 지점 근처에 있으면 직선 이동
-                    (order.target - transform.position).normalized_or_zero()
-                } else if let Some(dir) = // 플로우 필드에서 방향 벡터를 샘플링
-                    flow_grid.sample_flow_field(flow_field, transform.position)
-                {
-                    dir
+    query
+        .iter_mut()
+        .for_each(|(transform, mut movement, mut moving)| {
+            let (flow_field, target) =
+                if let Ok((flow_field, order)) = move_orders.get(moving.order) {
+                    (flow_field, order.target)
+                } else if let Ok((flow_field, attack_order)) = attack_orders.get(moving.order) {
+                    (flow_field, attack_order.last_unit_pos)
                 } else {
-                    Vector2::ZERO
-                };
-                if triggered.contains(unit_entity) {
-                    return; // 이미 DelayedStopTrigger가 있는 유닛은 건너뜀
-                }
-                match spatial_grid.collision_check(
-                    transform.position,
-                    transform.size + STOP_COL_MARGIN,
-                    Some(&[unit_entity]),
-                ) {
-                    CollisionResult::NoCollision => {}
-                    CollisionResult::Collided(entity_info_vec, _) => {
-                        if entity_info_vec
-                            .into_iter()
-                            .map(|e| e.entity)
-                            .any(|e| order.finished.contains(&e))
-                        {
-                            commands
-                                .entity(unit_entity)
-                                .insert(DelayedStopTrigger { timer: STOP_DELAY });
-                            // 명령을 완료한 유닛과 충돌하면 0.5초 후에 명령 제거
-                        }
-                    }
-                    CollisionResult::OutOfBounds => {}
-                };
-
-                if transform.position.distance_squared_to(order.target) < margin_squared {
-                    commands
-                        .entity(unit_entity)
-                        .insert(DelayedStopTrigger { timer: STOP_DELAY }); // 목표 지점에 도달하면 0.5초 후에 명령 제거
                     return;
-                }
-            }
+                };
+            moving.dist_target_sq = transform.position.distance_squared_to(target);
+            movement.preferred_dir = if moving.dist_target_sq < near_target_margin_squared {
+                // 목표 지점 근처에 있으면 직선 이동
+                (target - transform.position).normalized_or_zero()
+            } else if let Some(dir) = // 플로우 필드에서 방향 벡터를 샘플링
+                flow_grid.sample_flow_field(flow_field, transform.position)
+            {
+                dir
+            } else {
+                Vector2::ZERO
+            };
         });
-        if order.followers.is_empty() {
+}
+
+pub fn remove_empty_orders_system(
+    mut commands: Commands,
+    query: Query<Entity, Or<(With<MoveOrder>, With<AttackOrder>)>>,
+    query_moving: Query<&Moving>,
+    query_attacking: Query<&Attacking>,
+) {
+    query.iter().for_each(|entity| {
+        let has_following_units = query_moving.iter().any(|moving| moving.order == entity)
+            || query_attacking
+                .iter()
+                .any(|attacking| attacking.order == entity);
+        if !has_following_units {
             commands.entity(entity).despawn();
         }
     });
@@ -181,15 +168,20 @@ pub fn flow_movement_system(
 pub fn stop_unit_system(
     mut commands: Commands,
     query: Query<(Entity, &Transform, &Moving), Without<DelayedStopTrigger>>,
+    query_stopped: Query<(Entity, &Stopped)>,
     orders: Query<&MoveOrder>,
     spatial_grid: Res<SpatialGrid>,
 ) {
+    let mut stopped_units_map: HashMap<Entity, Vec<Option<Entity>>> = HashMap::new();
+    query_stopped.iter().for_each(|(entity, stopped)| {
+        if let Some(last_order) = stopped.last_order {
+            stopped_units_map
+                .entry(last_order)
+                .or_insert_with(Vec::new)
+                .push(Some(entity));
+        }
+    });
     query.iter().for_each(|(entity, transform, moving)| {
-        let order = if let Ok(order) = orders.get(moving.order) {
-            order
-        } else {
-            return;
-        };
         match spatial_grid.collision_check(
             transform.position,
             transform.size + STOP_COL_MARGIN,
@@ -197,11 +189,16 @@ pub fn stop_unit_system(
         ) {
             CollisionResult::NoCollision => {}
             CollisionResult::Collided(entity_info_vec, _) => {
-                if entity_info_vec
-                    .into_iter()
-                    .map(|e| e.entity)
-                    .any(|e| order.finished.contains(&e))
-                {
+                if entity_info_vec.into_iter().any(|e| {
+                    stopped_units_map
+                        .get(&moving.order)
+                        .map_or(false, |stopped_units| {
+                            stopped_units.iter().any(|&stopped_entity| {
+                                stopped_entity
+                                    .map_or(false, |stopped_entity| stopped_entity == e.entity)
+                            })
+                        })
+                }) {
                     commands
                         .entity(entity)
                         .insert(DelayedStopTrigger { timer: STOP_DELAY });
@@ -209,13 +206,83 @@ pub fn stop_unit_system(
             }
             CollisionResult::OutOfBounds => {}
         }
+        if let Ok(order) = orders.get(moving.order) {
+            if transform.position.distance_squared_to(order.target) < ORDER_MARGIN * ORDER_MARGIN {
+                commands
+                    .entity(entity)
+                    .insert(DelayedStopTrigger { timer: STOP_DELAY });
+            }
+        }
     });
+}
+
+pub fn move_or_attack_system(
+    mut commands: Commands,
+    query_moving: Query<(Entity, &Transform, &Moving, &UnitBattleStats)>,
+    query_attacking: Query<(Entity, &Transform, &Attacking, &UnitBattleStats)>,
+    query_attack: Query<&AttackOrder>,
+    query_transform: Query<&Transform>,
+) {
+    query_moving
+        .iter()
+        .for_each(|(entity, transform, moving, battle_stats)| {
+            if let Ok(attack_order) = query_attack.get(moving.order) {
+                if let Ok(target_transform) = query_transform.get(attack_order.target) {
+                    let dist_sq = transform
+                        .position
+                        .distance_squared_to(target_transform.position);
+                    if dist_sq < battle_stats.attack_range * battle_stats.attack_range {
+                        commands.entity(entity).insert(Attacking {
+                            order: moving.order,
+                            cooldown: 0.0,
+                            dist_target_sq: dist_sq,
+                        });
+                        commands.entity(entity).remove::<Moving>();
+                    }
+                } else {
+                    commands.entity(entity).remove::<Moving>();
+                    commands.entity(entity).insert(Stopped {
+                        stop_position: transform.position,
+                        in_range: true,
+                        pos_renew_delay: 0.0,
+                        last_order: None,
+                    });
+                    commands.entity(moving.order).despawn(); // 공격 대상이 없으면 명령 제거
+                }
+            }
+        });
+    query_attacking
+        .iter()
+        .for_each(|(entity, transform, attacking, battle_stats)| {
+            if let Ok(attack_order) = query_attack.get(attacking.order) {
+                if let Ok(target_transform) = query_transform.get(attack_order.target) {
+                    let dist_sq = transform
+                        .position
+                        .distance_squared_to(target_transform.position);
+                    if dist_sq > battle_stats.attack_range * battle_stats.attack_range {
+                        commands.entity(entity).insert(Moving {
+                            order: attacking.order,
+                            dist_target_sq: dist_sq,
+                        });
+                        commands.entity(entity).remove::<Attacking>();
+                    }
+                } else {
+                    commands.entity(entity).remove::<Attacking>();
+                    commands.entity(entity).insert(Stopped {
+                        stop_position: transform.position,
+                        in_range: true,
+                        pos_renew_delay: 0.0,
+                        last_order: None,
+                    });
+                    commands.entity(attacking.order).despawn(); // 공격 대상이 없으면 명령 제거
+                }
+            }
+        });
 }
 
 pub fn delayed_stop_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut DelayedStopTrigger, &Transform, &Moving)>,
-    mut orders: Query<&mut MoveOrder>,
     time: Res<Time>,
 ) {
     let delta = time.delta;
@@ -224,17 +291,11 @@ pub fn delayed_stop_system(
         .for_each(|(entity, mut trigger, transform, moving)| {
             trigger.timer -= delta;
             if trigger.timer <= 0.0 {
-                if let Ok(mut order) = orders.get_mut(moving.order) {
-                    order.following.remove(&entity);
-                    order.finished.insert(entity);
-                    if order.following.is_empty() {
-                        commands.entity(moving.order).despawn();
-                    }
-                }
                 commands.entity(entity).insert(Stopped {
                     stop_position: transform.position,
                     in_range: true,
                     pos_renew_delay: 0.0,
+                    last_order: Some(moving.order),
                 });
                 commands.entity(entity).remove::<DelayedStopTrigger>();
                 commands.entity(entity).remove::<Moving>();
@@ -339,14 +400,33 @@ pub fn avoid_system(
 }
 
 pub fn update_flow_field_system(
-    mut query: Query<(&mut FlowField, &MoveOrder), Changed<MoveOrder>>,
+    mut query_move: Query<(&mut FlowField, &MoveOrder), (Changed<MoveOrder>, Without<AttackOrder>)>,
+    mut query_attack: Query<(&mut FlowField, &mut AttackOrder), Without<MoveOrder>>,
+    query_transform: Query<&Transform>,
     grid: Res<FlowGrid>,
 ) {
-    query.par_iter_mut().for_each(|(mut flow_field, order)| {
-        flow_field.field = grid
-            .gen_flow_field(order.target)
-            .unwrap_or_else(|_| vec![None; grid.width * grid.height]);
-    });
+    query_move
+        .par_iter_mut()
+        .for_each(|(mut flow_field, order)| {
+            flow_field.field = grid
+                .gen_flow_field(order.target)
+                .unwrap_or_else(|_| vec![None; grid.width * grid.height]);
+        });
+    query_attack
+        .par_iter_mut()
+        .for_each(|(mut flow_field, mut attack_order)| {
+            if let Ok(target_transform) = query_transform.get(attack_order.target) {
+                let new_pos = grid.world_to_grid(target_transform.position);
+                if flow_field.field.is_empty()
+                    || new_pos != grid.world_to_grid(attack_order.last_unit_pos)
+                {
+                    flow_field.field = grid
+                        .gen_flow_field(target_transform.position)
+                        .unwrap_or_else(|_| vec![None; grid.width * grid.height]);
+                }
+                attack_order.last_unit_pos = target_transform.position;
+            }
+        });
 }
 
 pub fn update_spatial_grid_system(
@@ -390,8 +470,18 @@ pub fn stopped_in_range_system(
 }
 
 pub fn acceleration_system(
-    mut query_moving: Query<(&mut UnitMovement, &UnitStats, &Moving), Without<Stopped>>,
-    mut query_stopped: Query<(&mut UnitMovement, &UnitStats, &Stopped), Without<Moving>>,
+    mut query_moving: Query<
+        (&mut UnitMovement, &UnitStats, &Moving),
+        (Without<Stopped>, Without<Attacking>),
+    >,
+    mut query_stopped: Query<
+        (&mut UnitMovement, &UnitStats, &Stopped),
+        (Without<Moving>, Without<Attacking>),
+    >,
+    mut query_attacking: Query<
+        (&mut UnitMovement, &UnitStats),
+        (With<Attacking>, Without<Moving>, Without<Stopped>),
+    >,
     time: Res<Time>,
 ) {
     query_moving
@@ -419,5 +509,11 @@ pub fn acceleration_system(
                 movement.preferred_speed = movement.preferred_speed.min(stats.max_speed);
                 // 최대 속도 제한
             }
+        });
+    query_attacking
+        .par_iter_mut()
+        .for_each(|(mut movement, stats)| {
+            movement.preferred_speed -= stats.acceleration * time.delta * 2.0;
+            movement.preferred_speed = movement.preferred_speed.max(0.0);
         });
 }

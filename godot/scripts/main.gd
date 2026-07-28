@@ -10,6 +10,9 @@ func _unhandled_input(event):
         if event.button_index == MOUSE_BUTTON_RIGHT:
             var mouse_pos = get_global_mouse_position()
             unit_manager.order_move(mouse_pos)
+    if Input.is_action_just_pressed("attack"):
+        var mouse_pos = get_global_mouse_position()
+        unit_manager.order_attack(mouse_pos)
 
 func _draw():
     var vectors = unit_manager.get_flow_vectors()
