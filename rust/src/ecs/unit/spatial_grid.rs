@@ -308,6 +308,7 @@ impl SpatialGrid {
         &self,
         position: Vector2,
         radius: f32,
+        by_center: bool,
     ) -> anyhow::Result<Vec<EntityInfo>> {
         let mut result = Vec::new();
         let (grid_x, grid_y) = self
@@ -320,7 +321,15 @@ impl SpatialGrid {
                 if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
                     let idx = (y as usize) * self.width + (x as usize);
                     if let Some(entities) = &self.cells[idx] {
-                        result.extend(entities.iter().cloned());
+                        result.extend(
+                            entities
+                                .iter()
+                                .filter(|e| {
+                                    (position - e.pos).length_squared()
+                                        < (radius + if by_center { 0.0 } else { e.radius }).powi(2)
+                                })
+                                .cloned(),
+                        );
                     }
                 }
             }

@@ -18,8 +18,6 @@ pub struct ThingRenderer {
     #[export]
     mesh: Option<Gd<Mesh>>,
     #[export]
-    sheet_size: Vector2,
-    #[export]
     y_sorted: bool,
     #[export]
     hp_texture: Option<Gd<Texture2D>>,
@@ -36,7 +34,6 @@ impl IMultiMeshInstance2D for ThingRenderer {
             t_type: ThingType::Test,
             unit_manager: None,
             mesh: None,
-            sheet_size: Vector2::new(1.0, 1.0),
             y_sorted: false,
             hp_texture: None,
             hp_shader: None,

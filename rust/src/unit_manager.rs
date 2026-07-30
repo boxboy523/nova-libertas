@@ -65,7 +65,7 @@ impl INode2D for UnitManager {
             self.world.trigger(SpawnUnitEvent {
                 transform: Transform {
                     position,
-                    scale: Vector2::new(-1.0, 1.0),
+                    scale: Vector2::new(1.0, 1.0),
                     size: 15.0,
                     t_type: ThingType::Test,
                     ..Default::default()
@@ -85,12 +85,15 @@ impl INode2D for UnitManager {
         self.schedule.add_systems(update_spatial_grid_system);
         self.schedule.add_systems(acceleration_system);
         self.schedule.add_systems(delayed_stop_system);
-        self.schedule.add_systems(stop_unit_system);
+        self.schedule.add_systems(stop_attacking_unit_system);
+        self.schedule.add_systems(stop_moving_unit_system);
         self.schedule.add_systems(remove_empty_orders_system);
+        self.schedule.add_systems(flow_field_added_system);
         self.schedule.add_systems(
             (
                 flow_movement_system,
                 stopped_in_range_system,
+                auto_attack_system,
                 move_or_attack_system,
                 attack_system,
                 avoid_system,
@@ -193,6 +196,21 @@ impl UnitManager {
         self.world.trigger(MoveOrderEvent {
             target_position: target,
             units,
+            auto_attack: false,
+        });
+    }
+
+    #[func]
+    pub fn order_move_with_auto_attack(&mut self, target: Vector2) {
+        let units = self
+            .world
+            .query_filtered::<Entity, (With<Transform>, With<UnitMovement>, With<Selected>)>()
+            .iter(&self.world)
+            .collect::<HashSet<_>>();
+        self.world.trigger(MoveOrderEvent {
+            target_position: target,
+            units,
+            auto_attack: true,
         });
     }
 
@@ -204,7 +222,7 @@ impl UnitManager {
             .iter(&self.world)
             .collect::<HashSet<_>>();
         let spatial_grid = self.world.resource::<SpatialGrid>();
-        let mut target_entities = match spatial_grid.query_entities(target_pos, 1.0) {
+        let mut target_entities = match spatial_grid.query_entities(target_pos, 1.0, false) {
             Ok(entities) => entities,
             Err(_) => {
                 godot_error!("SpatialGrid query failed at position {:?}", target_pos);

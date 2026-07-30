@@ -3,8 +3,14 @@ use bevy_ecs::prelude::*;
 use godot::prelude::*;
 
 pub fn transform_update_system(
-    query: Query<(&Transform, Option<&UnitMovement>, Option<&Team>), Changed<Transform>>,
-    query_hp: Query<(&Transform, &UnitHp, &UnitStats), Or<(Changed<UnitHp>, Changed<Transform>)>>,
+    query: Query<
+        (&Transform, Option<&UnitMovement>, Option<&Team>),
+        (Changed<Transform>, Without<Dead>),
+    >,
+    query_hp: Query<
+        (&Transform, &UnitHp, &UnitStats),
+        (Or<(Changed<UnitHp>, Changed<Transform>)>, Without<Dead>),
+    >,
     mut buffer: ResMut<TransformBuffer>,
 ) {
     query.iter().for_each(|(transform, movement, team)| {
@@ -37,4 +43,15 @@ pub fn despawn_units_system(
             }
         }
     }
+}
+
+pub fn update_spatial_grid_system(
+    object: Query<(Entity, &Transform), With<UnitMovement>>,
+    mut grid: ResMut<SpatialGrid>,
+) {
+    grid.clear();
+    object.iter().for_each(|(entity, transform)| {
+        grid.add_entity(entity, transform.position, transform.size)
+            .ok();
+    });
 }

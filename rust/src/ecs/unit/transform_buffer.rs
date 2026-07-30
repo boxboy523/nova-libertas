@@ -45,7 +45,7 @@ impl ThingType {
     pub fn get_unit_battle_stats(&self) -> Option<UnitBattleStats> {
         match self {
             ThingType::Test => Some(UnitBattleStats {
-                attack_range: 150.0,
+                attack_range: 100.0,
                 attack_damage: 10.0,
                 attack_cooldown: 1.0,
             }),
@@ -232,14 +232,14 @@ fn dir_to_row(dir: Vector2) -> (u32, bool) {
         .rem_euclid(8.0) as u32;
 
     match oct {
-        0 => (2, false), // Right
-        1 => (1, false), // Up-Right
-        2 => (0, false), // Up
-        3 => (1, true),  // Up-Left
-        4 => (2, true),  // Left
-        5 => (3, true),  // Down-Left
-        6 => (4, false), // Down
-        7 => (3, false), // Down-Right
+        0 => (2, true),  // Right
+        1 => (1, true),  // Down-Right
+        2 => (0, false), // Down
+        3 => (1, false), // Down-Left
+        4 => (2, false), // Left
+        5 => (3, false), // Up-Left
+        6 => (4, false), // Up
+        7 => (3, true),  // Up-Right
         _ => unreachable!(),
     }
 }
