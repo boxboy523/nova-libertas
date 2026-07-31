@@ -67,6 +67,8 @@
 
           # 빌드 도구
           pkg-config
+          alsa-lib
+          udev
           openssl
           jq
           llvmPackages.libclang

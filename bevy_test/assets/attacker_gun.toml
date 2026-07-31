@@ -1,0 +1,15 @@
+t_type = "AttackerGun"
+[sprite_info]
+img_path = "Stand/attackerGunStand_0001.png"
+size = [150.0, 150.0]
+
+[unit_stats]
+size = 10.0
+max_speed = 100.0
+acceleration = 200.0
+max_hp = 100.0
+
+[battle_stats]
+attack_range = 1.0
+attack_damage = 10.0
+attack_cooldown = 1.0

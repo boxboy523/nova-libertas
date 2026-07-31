@@ -1,0 +1,4 @@
+t_type = "Wall"
+[sprite_info]
+img_path = "brick_wall.jpg"
+size = [40.0, 40.0]

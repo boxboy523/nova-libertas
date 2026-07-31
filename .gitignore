@@ -2,3 +2,4 @@
 .envrc
 .direnv/
 /godot/.godot
+/bevy_test/target
