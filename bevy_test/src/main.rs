@@ -1,4 +1,4 @@
-use bevy::{ecs::system::command::init_resource, prelude::*};
+use bevy::prelude::*;
 use bevy_test::prelude::*;
 
 fn main() {
@@ -15,6 +15,7 @@ fn main() {
         .insert_resource(flow_grid)
         .insert_resource(spatial_grid)
         .insert_resource(thing_catalog)
+        .add_plugins(UIPlugin)
         .add_plugins(DebugPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(CombatPlugin)

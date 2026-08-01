@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::prelude::*;
 use bevy::{platform::collections::HashMap, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -10,9 +12,15 @@ pub enum ThingType {
 }
 
 impl ThingType {
+    pub fn get_path(&self) -> PathBuf {
+        match self {
+            ThingType::AttackerGun => PathBuf::from("assets/attackerGun"),
+            ThingType::Wall => PathBuf::from("assets/wall"),
+        }
+    }
     pub fn get_info(&self) -> ThingInfo {
         let info_path = match self {
-            ThingType::AttackerGun => "assets/attacker_gun.toml",
+            ThingType::AttackerGun => "assets/attackerGun/attacker_gun.toml",
             ThingType::Wall => "assets/wall.toml",
         };
         let text = std::fs::read_to_string(info_path).expect("Failed to read thing info file");
@@ -49,13 +57,6 @@ impl ThingCatalog {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ThingInfo {
     pub t_type: ThingType,
-    pub sprite_info: SpriteInfo,
     pub unit_stats: Option<UnitStats>,
     pub battle_stats: Option<UnitBattleStats>,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct SpriteInfo {
-    pub img_path: String,
-    pub size: Vec2,
 }

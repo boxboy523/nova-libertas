@@ -15,7 +15,7 @@ pub mod prelude {
     };
     pub use crate::constants::*;
     pub use crate::debug::DebugPlugin;
-    pub use crate::input::{InputPlugin, MouseState};
+    pub use crate::input::{mouse_input, InputPlugin, MouseState};
     pub use crate::movement::{
         component::{
             DelayedStopTrigger, FieldFollowTarget, FlowField, Moving, Stopped, UnitMovement,
@@ -25,6 +25,7 @@ pub mod prelude {
         MovementPlugin,
     };
     pub use crate::thing::{ThingCatalog, ThingInfo, ThingType};
+    pub use crate::ui::UIPlugin;
     pub use crate::unit::{
         component::{Dead, Selected, Team, UnitStats},
         event::{SpawnUnitEvent, SpawnWallEvent},
