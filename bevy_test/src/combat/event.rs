@@ -11,11 +11,11 @@ pub struct AttackOrderEvent {
 pub fn attack_order_trigger(
     event: On<AttackOrderEvent>,
     mut commands: Commands,
-    query: Query<&Transform>,
+    query: Query<&Position>,
 ) {
     println!("AttackOrderEvent received for target: {:?}", event.target);
-    let last_pos = if let Ok(transform) = query.get(event.target) {
-        transform.translation.xy()
+    let last_pos = if let Ok(position) = query.get(event.target) {
+        **position
     } else {
         Vec2::ZERO // 대상이 존재하지 않으면 기본값으로 Vector2::ZERO 사용
     };

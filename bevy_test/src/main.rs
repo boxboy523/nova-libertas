@@ -15,12 +15,14 @@ fn main() {
         .insert_resource(flow_grid)
         .insert_resource(spatial_grid)
         .insert_resource(thing_catalog)
+        .add_plugins(SpritePlugin)
         .add_plugins(UIPlugin)
         .add_plugins(DebugPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(CombatPlugin)
         .add_plugins(UnitPlugin)
         .add_plugins(MovementPlugin)
-        .add_systems(Startup, bevy_test::setup)
+        .add_plugins(World3DPlugin)
+        .add_systems(PostStartup, bevy_test::setup)
         .run();
 }

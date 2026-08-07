@@ -6,6 +6,8 @@ pub mod movement;
 pub mod thing;
 pub mod ui;
 pub mod unit;
+pub mod visual;
+pub mod world3d;
 
 pub mod prelude {
     pub use crate::combat::{
@@ -27,11 +29,20 @@ pub mod prelude {
     pub use crate::thing::{ThingCatalog, ThingInfo, ThingType};
     pub use crate::ui::UIPlugin;
     pub use crate::unit::{
-        component::{Dead, Selected, Team, UnitStats},
+        component::{Dead, Position, Selected, Team, UnitStats},
         event::{SpawnUnitEvent, SpawnWallEvent},
         spatial_grid::{CollisionResult, SpatialGrid},
         UnitPlugin,
     };
+    pub use crate::visual::{
+        data::{
+            AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState,
+            CurrentAnimation,
+        },
+        info::{SpriteConfig, SpriteInfo, SpriteInfoKind},
+        SpriteCatalog, SpritePlugin, UnitVisual, UnitVisualKind,
+    };
+    pub use crate::world3d::{create_atlas_quad, spawn_billboard, World3DPlugin};
 }
 
 pub fn load_map_from_csv(path: &str) -> (usize, usize, Vec<bool>) {
@@ -52,11 +63,10 @@ use bevy::prelude::*;
 use prelude::*;
 
 pub fn setup(mut commands: Commands) {
-    commands.spawn((Camera2d, Transform::from_xyz(500.0, 500.0, 0.0)));
     for i in 0..5 {
         for j in 0..5 {
             commands.trigger(SpawnUnitEvent {
-                transform: Transform::from_xyz(i as f32 * 40.0 + 40.0, j as f32 * 40.0 + 40.0, 0.0),
+                position: Vec2::new(i as f32 * 40.0 + 40.0, j as f32 * 40.0 + 40.0),
                 t_type: ThingType::AttackerGun,
                 team: Team::Player,
                 hp: 100.0,

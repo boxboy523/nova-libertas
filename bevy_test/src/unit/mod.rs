@@ -20,6 +20,7 @@ impl Plugin for UnitPlugin {
                 )
                     .chain(),
             )
-            .add_systems(Startup, system::startup_spawn_wall);
+            .add_systems(Startup, system::startup_spawn_wall)
+            .add_systems(Update, system::position_to_transform_system);
     }
 }

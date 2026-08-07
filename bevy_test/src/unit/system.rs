@@ -8,13 +8,12 @@ pub fn despawn_units_system(mut commands: Commands, dead_query: Query<Entity, Wi
 }
 
 pub fn update_spatial_grid_system(
-    object: Query<(Entity, &Transform, &UnitStats), With<UnitMovement>>,
+    object: Query<(Entity, &Position, &UnitStats), With<UnitMovement>>,
     mut grid: ResMut<SpatialGrid>,
 ) {
     grid.clear();
-    object.iter().for_each(|(entity, transform, unitstats)| {
-        grid.add_entity(entity, transform.translation.xy(), unitstats.size)
-            .ok();
+    object.iter().for_each(|(entity, position, unitstats)| {
+        grid.add_entity(entity, **position, unitstats.size).ok();
     });
 }
 
@@ -28,3 +27,21 @@ pub fn startup_spawn_wall(mut commands: Commands, spatial_grid: Res<SpatialGrid>
         }
     }
 }
+
+pub fn position_to_transform_system(
+    mut query: Query<(&Position, &UnitStats, &mut Transform)>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
+) {
+    let camera_up = camera.up().as_vec3();
+    let horizontal_up = Vec3::new(camera_up.x, 0.0, camera_up.z);
+    for (position, stats, mut transform) in query.iter_mut() {
+        let ground_position = Vec3::new(position.x, 0.0, position.y);
+        transform.translation = ground_position - horizontal_up * stats.size;
+    }
+}
+
+// pub fn update_unit_depth_system(mut query: Query<&mut Transform, With<UnitStats>>) {
+//     for mut transform in query.iter_mut() {
+//         transform.translation.z = 10.0 - transform.translation.y * 0.001;
+//     }
+// }

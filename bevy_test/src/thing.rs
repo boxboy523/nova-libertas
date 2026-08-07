@@ -13,16 +13,18 @@ pub enum ThingType {
 
 impl ThingType {
     pub fn get_path(&self) -> PathBuf {
+        PathBuf::from("assets").join(self.get_assets_path())
+    }
+
+    pub fn get_assets_path(&self) -> PathBuf {
         match self {
-            ThingType::AttackerGun => PathBuf::from("assets/attackerGun"),
-            ThingType::Wall => PathBuf::from("assets/wall"),
+            ThingType::AttackerGun => PathBuf::from("attackerGun"),
+            ThingType::Wall => PathBuf::from("wall"),
         }
     }
+
     pub fn get_info(&self) -> ThingInfo {
-        let info_path = match self {
-            ThingType::AttackerGun => "assets/attackerGun/attacker_gun.toml",
-            ThingType::Wall => "assets/wall.toml",
-        };
+        let info_path = self.get_path().join("info.toml");
         let text = std::fs::read_to_string(info_path).expect("Failed to read thing info file");
         toml::from_str(&text).expect("Failed to parse thing info file")
     }

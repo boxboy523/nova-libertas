@@ -3,46 +3,44 @@ use bevy::ecs::entity::Entities;
 use bevy::prelude::*;
 use dodgy_2d::{Agent, AvoidanceOptions};
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 // 유닛 이동 시스템: UnitMovement 컴포넌트를 가진 엔티티를 이동시키는 시스템
 pub fn apply_move_system(
-    mut query: Query<(Entity, &mut Transform, &mut UnitMovement)>,
+    mut query: Query<(Entity, &mut Position, &mut UnitMovement)>,
     time: Res<Time>,
 ) {
     let delta = time.delta_secs();
     query
         .par_iter_mut()
-        .for_each(|(_, mut transform, movement)| {
+        .for_each(|(_, mut position, movement)| {
             if movement.speed < f32::EPSILON {
                 return; // 이동할 필요가 없으면 건너뜀
             }
             let direction = movement.dir_vec.normalize_or_zero();
             let speed = movement.speed;
-            transform.translation += (direction * speed * delta).extend(0.0);
+            **position += direction * speed * delta;
         });
 }
 
 pub fn smooth_wall_passing_system(
-    mut query: Query<(Entity, &Transform, &mut UnitMovement, &UnitStats)>,
+    mut query: Query<(Entity, &Position, &mut UnitMovement, &UnitStats)>,
     spatial_grid: Res<SpatialGrid>,
     time: Res<Time>,
 ) {
     let delta = time.delta_secs();
     query
         .par_iter_mut()
-        .for_each(|(entity, transform, mut movement, stats)| {
-            if let CollisionResult::Collided(_, walls) = spatial_grid.collision_check(
-                transform.translation.xy(),
-                stats.size,
-                Some(&[entity]),
-            ) {
+        .for_each(|(entity, position, mut movement, stats)| {
+            if let CollisionResult::Collided(_, walls) =
+                spatial_grid.collision_check(**position, stats.size, Some(&[entity]))
+            {
                 if !walls.is_empty() {
                     let wall_center = Vec2::new(
                         (walls[0].0 as f32 + 0.5) * spatial_grid.cell_size,
                         (walls[0].1 as f32 + 0.5) * spatial_grid.cell_size,
                     );
-                    let wall_vec = transform.translation - wall_center.extend(0.0);
+                    let wall_vec = **position - wall_center;
                     let normal = if wall_vec.x.abs() > wall_vec.y.abs() * 1.2 {
                         Vec2::new(wall_vec.x.signum(), 0.0)
                     } else if wall_vec.y.abs() > wall_vec.x.abs() * 1.2 {
@@ -60,7 +58,7 @@ pub fn smooth_wall_passing_system(
             }
             let direction = movement.dir_vec.normalize_or_zero();
             let speed = movement.speed;
-            let col_pos = transform.translation.xy() + direction * (speed * delta);
+            let col_pos = **position + direction * (speed * delta);
             match spatial_grid.collision_check(
                 col_pos,
                 stats.size + OBSTACLE_MARGIN,
@@ -73,7 +71,7 @@ pub fn smooth_wall_passing_system(
                             (walls[0].0 as f32 + 0.5) * spatial_grid.cell_size,
                             (walls[0].1 as f32 + 0.5) * spatial_grid.cell_size,
                         );
-                        let wall_vec = transform.translation.xy() - wall_center;
+                        let wall_vec = **position - wall_center;
                         let normal = if wall_vec.x.abs() > wall_vec.y.abs() * 1.2 {
                             Vec2::new(wall_vec.x.signum(), 0.0)
                         } else if wall_vec.y.abs() > wall_vec.x.abs() * 1.2 {
@@ -96,9 +94,8 @@ pub fn smooth_wall_passing_system(
                     let clamped_y = col_pos
                         .y
                         .clamp(stats.size, spatial_grid.map_size.y - stats.size);
-                    movement.dir_vec = (Vec2::new(clamped_x, clamped_y)
-                        - transform.translation.xy())
-                    .normalize_or_zero();
+                    movement.dir_vec =
+                        (Vec2::new(clamped_x, clamped_y) - **position).normalize_or_zero();
                 }
             };
         });
@@ -107,7 +104,7 @@ pub fn smooth_wall_passing_system(
 pub fn stop_moving_unit_system(
     mut commands: Commands,
     query: Query<
-        (Entity, &Transform, &Moving, &UnitStats),
+        (Entity, &Position, &Moving, &UnitStats),
         (Without<DelayedStopTrigger>, Without<Attack>),
     >,
     query_stopped: Query<(Entity, &Stopped)>,
@@ -123,9 +120,9 @@ pub fn stop_moving_unit_system(
                 .push(Some(entity));
         }
     });
-    query.iter().for_each(|(entity, transform, moving, stats)| {
+    query.iter().for_each(|(entity, position, moving, stats)| {
         match spatial_grid.collision_check(
-            transform.translation.xy(),
+            **position,
             stats.size + STOP_COL_MARGIN,
             Some(&[entity]),
         ) {
@@ -149,11 +146,10 @@ pub fn stop_moving_unit_system(
             CollisionResult::OutOfBounds => {}
         }
         if let Ok(field) = query_fields.get(moving.field) {
-            if transform.translation.xy().distance_squared(field.goal) < ORDER_MARGIN * ORDER_MARGIN
-            {
-                commands
-                    .entity(entity)
-                    .insert(DelayedStopTrigger { timer: STOP_DELAY });
+            if position.distance_squared(field.goal) < ORDER_MARGIN * ORDER_MARGIN {
+                commands.entity(entity).insert(DelayedStopTrigger {
+                    timer: STOP_DELAY / 2.0,
+                });
             }
         }
     });
@@ -179,30 +175,25 @@ pub fn stop_attacking_unit_system(
 
 // 명령 완료 후 멈춘 유닛이 멈춘 위치로 돌아가는 시스템
 pub fn stopped_in_range_system(
-    mut query: Query<(&Transform, &mut UnitMovement, &mut Stopped)>,
+    mut query: Query<(&Position, &mut UnitMovement, &mut Stopped)>,
     time: Res<Time>,
 ) {
     let delta = time.delta_secs();
     query
         .iter_mut()
-        .for_each(|(transform, mut movement, mut stopped)| {
-            if transform
-                .translation
-                .xy()
-                .distance_squared(stopped.stop_position)
+        .for_each(|(position, mut movement, mut stopped)| {
+            if position.distance_squared(stopped.stop_position)
                 < RETURN_TO_STOP_MARGIN * RETURN_TO_STOP_MARGIN
             {
-                movement.preferred_dir =
-                    (stopped.stop_position - transform.translation.xy()).normalize_or_zero();
+                movement.preferred_dir = (stopped.stop_position - **position).normalize_or_zero();
                 stopped.in_range = true;
                 stopped.pos_renew_delay += delta;
                 if stopped.pos_renew_delay >= STOP_RENEW_DELAY {
-                    stopped.stop_position = transform.translation.xy();
+                    stopped.stop_position = **position;
                     stopped.pos_renew_delay = 0.0;
                 }
             } else {
-                movement.preferred_dir =
-                    (stopped.stop_position - transform.translation.xy()).normalize_or_zero();
+                movement.preferred_dir = (stopped.stop_position - **position).normalize_or_zero();
                 stopped.in_range = false;
             }
         });
@@ -210,17 +201,20 @@ pub fn stopped_in_range_system(
 
 pub fn delayed_stop_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut DelayedStopTrigger, &Transform, &Moving)>,
+    mut query: Query<(Entity, &mut DelayedStopTrigger, &Position, &Moving)>,
     time: Res<Time>,
 ) {
     let delta = time.delta_secs();
     query
         .iter_mut()
-        .for_each(|(entity, mut trigger, transform, moving)| {
+        .for_each(|(entity, mut trigger, position, moving)| {
             trigger.timer -= delta;
             if trigger.timer <= 0.0 {
+                commands
+                    .entity(entity)
+                    .insert(CurrentAnimation(AnimationKind::Stand));
                 commands.entity(entity).insert(Stopped {
-                    stop_position: transform.translation.xy(),
+                    stop_position: **position,
                     in_range: true,
                     pos_renew_delay: 0.0,
                     last_field: Some(moving.field),
@@ -236,7 +230,7 @@ pub fn delayed_stop_system(
 pub fn avoid_system(
     mut query: Query<(
         Entity,
-        &Transform,
+        &Position,
         &mut UnitMovement,
         &UnitStats,
         Option<&Moving>,
@@ -246,15 +240,15 @@ pub fn avoid_system(
 ) {
     let agents = query
         .iter()
-        .map(|(entity, transform, movement, stats, opt_moving)| {
+        .map(|(entity, position, movement, stats, opt_moving)| {
             let preferred_velocity =
                 movement.preferred_dir.normalize_or_zero() * movement.preferred_speed;
             (
                 entity,
                 Agent {
                     position: dodgy_2d::Vec2 {
-                        x: transform.translation.x,
-                        y: transform.translation.y,
+                        x: position.x,
+                        y: position.y,
                     },
                     velocity: dodgy_2d::Vec2 {
                         x: preferred_velocity.x,
@@ -272,13 +266,13 @@ pub fn avoid_system(
         .collect::<Vec<_>>();
     query
         .par_iter_mut()
-        .for_each(|(entity, transform, mut movement, stats, opt_moving)| {
+        .for_each(|(entity, position, mut movement, stats, opt_moving)| {
             let preferred_velocity =
                 movement.preferred_dir.normalize_or_zero() * movement.preferred_speed;
             let agent = Agent {
                 position: dodgy_2d::Vec2 {
-                    x: transform.translation.x,
-                    y: transform.translation.y,
+                    x: position.x,
+                    y: position.y,
                 },
                 velocity: dodgy_2d::Vec2 {
                     x: preferred_velocity.x,
@@ -291,11 +285,9 @@ pub fn avoid_system(
                     STOP_RESP
                 },
             };
-            let neighbor_entities = if let Ok(entity_info_vec) = spatial_grid.query_entities(
-                transform.translation.xy(),
-                stats.size + SEARCH_RADIUS,
-                false,
-            ) {
+            let neighbor_entities = if let Ok(entity_info_vec) =
+                spatial_grid.query_entities(**position, stats.size + SEARCH_RADIUS, false)
+            {
                 entity_info_vec
                     .into_iter()
                     .map(|e| e.entity)

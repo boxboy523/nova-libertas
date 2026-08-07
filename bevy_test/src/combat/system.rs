@@ -5,21 +5,18 @@ pub fn move_or_attack_system(
     mut commands: Commands,
     mut query: Query<(
         Entity,
-        &Transform,
+        &Position,
         &mut Attack,
         &UnitBattleStats,
         Option<&AutoAttack>,
     )>,
-    query_transform: Query<&Transform>,
+    query_position: Query<&Position>,
 ) {
     query
         .iter_mut()
-        .for_each(|(entity, transform, mut attack, battle_stats, opt_auto)| {
-            if let Ok(target_transform) = query_transform.get(attack.target) {
-                let dist_sq = transform
-                    .translation
-                    .xy()
-                    .distance_squared(target_transform.translation.xy());
+        .for_each(|(entity, position, mut attack, battle_stats, opt_auto)| {
+            if let Ok(target_position) = query_position.get(attack.target) {
+                let dist_sq = position.distance_squared(**target_position);
                 if dist_sq < battle_stats.attack_range * battle_stats.attack_range {
                     attack.attacking = true;
                 } else {
@@ -34,21 +31,21 @@ pub fn move_or_attack_system(
 
 pub fn auto_attack_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &Transform, &UnitBattleStats), (With<AutoAttack>, Without<Attack>)>,
-    query_transform: Query<&Transform>,
+    mut query: Query<(Entity, &Position, &UnitBattleStats), (With<AutoAttack>, Without<Attack>)>,
+    query_position: Query<&Position>,
     query_team: Query<&Team>,
     spatial_grid: Res<SpatialGrid>,
 ) {
     query
         .iter_mut()
-        .for_each(|(entity, transform, battle_stats)| {
+        .for_each(|(entity, position, battle_stats)| {
             let team = if let Ok(team) = query_team.get(entity) {
                 team
             } else {
                 return; // 팀 정보를 가져올 수 없으면 건너뜀
             };
             let mut nearby_entities = if let Ok(entity_info_vec) = spatial_grid.query_entities(
-                transform.translation.xy(),
+                **position,
                 battle_stats.attack_range,
                 true,
             ) {
@@ -62,17 +59,11 @@ pub fn auto_attack_system(
                 vec![]
             };
             nearby_entities.sort_by(|&a, &b| {
-                let dist_a = query_transform.get(a).map_or(f32::MAX, |t| {
-                    transform
-                        .translation
-                        .xy()
-                        .distance_squared(t.translation.xy())
+                let dist_a = query_position.get(a).map_or(f32::MAX, |target_position| {
+                    position.distance_squared(**target_position)
                 });
-                let dist_b = query_transform.get(b).map_or(f32::MAX, |t| {
-                    transform
-                        .translation
-                        .xy()
-                        .distance_squared(t.translation.xy())
+                let dist_b = query_position.get(b).map_or(f32::MAX, |target_position| {
+                    position.distance_squared(**target_position)
                 });
                 dist_a
                     .partial_cmp(&dist_b)
@@ -93,7 +84,7 @@ pub fn auto_attack_system(
 pub fn attack_system(
     mut commands: Commands,
     mut attackers: Query<(Entity, &mut Attack, &mut UnitMovement, &UnitBattleStats)>,
-    query_transform: Query<&Transform>,
+    query_position: Query<&Position>,
     time: Res<Time>,
 ) {
     let delta_time = time.delta_secs();
@@ -103,12 +94,12 @@ pub fn attack_system(
             if attack.attacking == false {
                 return;
             }
-            let transform = match query_transform.get(entity) {
-                Ok(t) => t,
-                Err(_) => return, // Transform 컴포넌트가 없으면 스킵
+            let position = match query_position.get(entity) {
+                Ok(position) => position,
+                Err(_) => return, // Position 컴포넌트가 없으면 스킵
             };
-            let dir = if let Ok(target_transform) = query_transform.get(attack.target) {
-                (transform.translation.xy() - target_transform.translation.xy()).normalize_or_zero()
+            let dir = if let Ok(target_position) = query_position.get(attack.target) {
+                (**position - **target_position).normalize_or_zero()
             } else {
                 Vec2::ZERO
             };

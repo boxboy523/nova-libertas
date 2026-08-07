@@ -1,0 +1,40 @@
+t_type = "AttackerGun"
+[sprite_info]
+type = "animation_set"
+size = [30.0, 30.0]
+offset = [0.0, -7.0]
+
+[sprite_info.stand]
+cell_size = [196, 196]
+columns = 1
+rows = 5
+frame_count = 1
+fps = 1.0
+looping = true
+
+[sprite_info.moving]
+cell_size = [196, 196]
+columns = 4
+rows = 5
+frame_count = 4
+fps = 8.0
+looping = true
+
+[sprite_info.attacking]
+cell_size = [196, 196]
+columns = 3
+rows = 5
+frame_count = 3
+fps = 8.0
+looping = false
+
+[unit_stats]
+size = 10.0
+max_speed = 100.0
+acceleration = 200.0
+max_hp = 100.0
+
+[battle_stats]
+attack_range = 1.0
+attack_damage = 10.0
+attack_cooldown = 1.0

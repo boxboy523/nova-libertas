@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 
-#[derive(Resource, Default)]
+#[derive(Resource, Debug)]
 pub struct MouseState {
     pub window_position: Vec2,
     pub world_position: Vec2,
+    pub cursor_ray: Ray3d,
     pub left_just_pressed: bool,
     pub left_pressed: bool,
     pub left_released: bool,
@@ -12,10 +13,26 @@ pub struct MouseState {
     pub right_released: bool,
 }
 
+impl Default for MouseState {
+    fn default() -> Self {
+        MouseState {
+            window_position: Vec2::ZERO,
+            world_position: Vec2::ZERO,
+            cursor_ray: Ray3d::new(Vec3::ZERO, Dir3::X),
+            left_just_pressed: false,
+            left_pressed: false,
+            left_released: false,
+            right_just_pressed: false,
+            right_pressed: false,
+            right_released: false,
+        }
+    }
+}
+
 pub fn mouse_input(
     buttons: Res<ButtonInput<MouseButton>>,
     window: Single<&Window>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut state: ResMut<MouseState>,
 ) {
     let Some(cursor) = window.cursor_position() else {
@@ -24,12 +41,17 @@ pub fn mouse_input(
 
     let (camera, camera_transform) = *camera;
 
-    let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor) else {
+    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
         return;
     };
-    state.window_position = cursor;
-    state.world_position = world_position;
 
+    let Some(distance) = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y)) else {
+        return;
+    };
+    let hit = ray.get_point(distance);
+    state.world_position = Vec2::new(hit.x, hit.z);
+    state.cursor_ray = ray;
+    state.window_position = cursor;
     state.left_just_pressed = buttons.just_pressed(MouseButton::Left);
     state.left_pressed = buttons.pressed(MouseButton::Left);
     state.left_released = buttons.just_released(MouseButton::Left);

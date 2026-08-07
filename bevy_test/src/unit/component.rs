@@ -23,3 +23,6 @@ pub enum Team {
     #[default]
     Neutral,
 }
+
+#[derive(Component, Debug, Default, Deref, DerefMut)]
+pub struct Position(pub Vec2); // 유닛의 지상 위치 (x, y)

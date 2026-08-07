@@ -33,5 +33,8 @@ pub fn move_order_trigger(event: On<MoveOrderEvent>, mut commands: Commands) {
             commands.entity(unit).remove::<AutoAttack>();
         }
         commands.entity(unit).remove::<Attack>();
+        commands
+            .entity(unit)
+            .insert(CurrentAnimation(AnimationKind::Move));
     });
 }

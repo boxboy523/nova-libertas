@@ -4,25 +4,25 @@ use std::collections::HashSet;
 
 // 명령 처리 시스템: 명령을 받은 유닛들을 FlowField를 따라 방향을 업데이트하는 시스템
 pub fn flow_movement_system(
-    mut query: Query<(&Transform, &mut UnitMovement, &mut Moving)>,
+    mut query: Query<(&Position, &mut UnitMovement, &mut Moving)>,
     query_fields: Query<&FlowField>,
     flow_grid: Res<FlowGrid>,
 ) {
     let near_target_margin_squared = NEAR_TARGET_MARGIN * NEAR_TARGET_MARGIN;
     query
         .iter_mut()
-        .for_each(|(transform, mut movement, mut moving)| {
+        .for_each(|(position, mut movement, mut moving)| {
             let flow_field = if let Ok(field) = query_fields.get(moving.field) {
                 field
             } else {
                 return; // FlowField를 찾을 수 없으면 건너뜀
             };
-            moving.dist_target_sq = transform.translation.xy().distance_squared(flow_field.goal);
+            moving.dist_target_sq = position.distance_squared(flow_field.goal);
             movement.preferred_dir = if moving.dist_target_sq < near_target_margin_squared {
                 // 목표 지점 근처에 있으면 직선 이동
-                (flow_field.goal - transform.translation.xy()).normalize_or_zero()
+                (flow_field.goal - **position).normalize_or_zero()
             } else if let Some(dir) = // 플로우 필드에서 방향 벡터를 샘플링
-                flow_grid.sample_flow_field(flow_field, transform.translation.xy())
+                flow_grid.sample_flow_field(flow_field, **position)
             {
                 dir
             } else {
@@ -49,17 +49,17 @@ pub fn remove_empty_orders_system(
 
 pub fn update_flow_field_system(
     mut query_target: Query<(&mut FlowField, &FieldFollowTarget)>,
-    query_transform: Query<&Transform>,
+    query_position: Query<&Position>,
     grid: Res<FlowGrid>,
 ) {
     query_target
         .par_iter_mut()
         .for_each(|(mut flow_field, follow_target)| {
-            if let Ok(target_transform) = query_transform.get(follow_target.0) {
-                if target_transform.translation.xy() != flow_field.goal {
+            if let Ok(target_position) = query_position.get(follow_target.0) {
+                if **target_position != flow_field.goal {
                     let last_grid_pos = grid.world_to_grid(flow_field.goal);
-                    let new_grid_pos = grid.world_to_grid(target_transform.translation.xy());
-                    flow_field.goal = target_transform.translation.xy();
+                    let new_grid_pos = grid.world_to_grid(**target_position);
+                    flow_field.goal = **target_position;
                     if last_grid_pos != new_grid_pos {
                         flow_field.field = grid
                             .gen_flow_field(flow_field.goal)

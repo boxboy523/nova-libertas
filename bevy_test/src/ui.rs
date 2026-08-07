@@ -60,11 +60,12 @@ fn selection_system(
     state: Res<MouseState>,
     spatial_grid: Res<SpatialGrid>,
     query_select: Query<Entity, With<Selected>>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     if state.left_just_pressed {
         let Ok(units_at_cursor) = spatial_grid.query_entities(state.world_position, 1.0, false)
         else {
+            warn!("Failed to query spatial grid for units at cursor");
             return;
         };
         if let Some(unit) = units_at_cursor.first() {
@@ -72,10 +73,12 @@ fn selection_system(
                 command.entity(unit).remove::<Selected>();
             });
             command.entity(unit.entity).insert(Selected);
+            println!("Selected unit at cursor: {:?}", unit.entity);
         } else {
             drag_selection.start = state.window_position;
             drag_selection.current = state.window_position;
             drag_selection.active = true;
+            println!("Started drag selection at: {:?}", drag_selection.start);
         }
     } else if state.left_pressed && drag_selection.active {
         drag_selection.current = state.window_position;
