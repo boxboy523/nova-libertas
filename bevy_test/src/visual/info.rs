@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use crate::prelude::*;
+use std::{collections::HashMap, path::PathBuf};
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -23,14 +24,9 @@ pub enum SpriteInfoKind {
     Simple {
         file: PathBuf, // 단순 이미지 파일 경로
     },
-    AnimationSet(AnimationSetInfo),
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct AnimationSetInfo {
-    pub stand: AnimationClipInfo,
-    pub moving: Option<AnimationClipInfo>,
-    pub attacking: Option<AnimationClipInfo>,
+    AnimationSet {
+        animations: HashMap<AnimationKind, AnimationClipInfo>, // 애니메이션 클립 정보
+    },
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

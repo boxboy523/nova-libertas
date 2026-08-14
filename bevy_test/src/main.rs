@@ -16,6 +16,7 @@ fn main() {
         .insert_resource(spatial_grid)
         .insert_resource(thing_catalog)
         .add_plugins(SpritePlugin)
+        .add_plugins(MaterialPlugin::<TeamColorMaterial>::default())
         .add_plugins(UIPlugin)
         .add_plugins(DebugPlugin)
         .add_plugins(InputPlugin)

@@ -59,8 +59,13 @@ fn setup_world_3d(
     ));
 }
 
-pub fn spawn_billboard(commands: &mut Commands, visual: &UnitVisual, target: Entity) {
-    let (mesh, material) = visual.get_mesh_mat(None);
+pub fn spawn_billboard(
+    commands: &mut Commands,
+    visual: &UnitVisual,
+    target: Entity,
+    team: Option<Team>,
+) {
+    let (mesh, material) = visual.get_mesh_mat(None, team);
     commands
         .entity(target)
         .insert((Mesh3d(mesh), MeshMaterial3d(material), Billboard));

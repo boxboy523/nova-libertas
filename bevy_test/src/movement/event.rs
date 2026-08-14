@@ -21,20 +21,19 @@ pub fn move_order_trigger(event: On<MoveOrderEvent>, mut commands: Commands) {
         },))
         .id();
     event.units.iter().for_each(|&unit| {
-        commands.entity(unit).insert(Moving {
-            field: new_field,
-            dist_target_sq: f32::MAX, // 초기값으로 큰 값을 설정
-        });
-        commands.entity(unit).remove::<DelayedStopTrigger>();
-        commands.entity(unit).remove::<Stopped>();
+        set_moving(
+            &mut commands,
+            unit,
+            Moving {
+                field: new_field,
+                dist_target_sq: f32::MAX,
+            },
+        );
         if event.auto_attack {
             commands.entity(unit).insert(AutoAttack);
         } else {
             commands.entity(unit).remove::<AutoAttack>();
         }
         commands.entity(unit).remove::<Attack>();
-        commands
-            .entity(unit)
-            .insert(CurrentAnimation(AnimationKind::Move));
     });
 }

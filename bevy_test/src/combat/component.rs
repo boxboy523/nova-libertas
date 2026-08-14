@@ -9,7 +9,10 @@ pub struct UnitBattleStats {
 }
 
 #[derive(Component, Debug, Clone, Copy)]
-pub struct UnitHp(pub f32); // 유닛의 현재 체력
+pub struct UnitHp {
+    pub current: f32,
+    pub max: f32,
+}
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Attack {

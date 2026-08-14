@@ -44,11 +44,9 @@ pub fn auto_attack_system(
             } else {
                 return; // 팀 정보를 가져올 수 없으면 건너뜀
             };
-            let mut nearby_entities = if let Ok(entity_info_vec) = spatial_grid.query_entities(
-                **position,
-                battle_stats.attack_range,
-                true,
-            ) {
+            let mut nearby_entities = if let Ok(entity_info_vec) =
+                spatial_grid.query_entities(**position, battle_stats.attack_range, true)
+            {
                 entity_info_vec
                     .into_iter()
                     .map(|e| e.entity)
@@ -99,11 +97,11 @@ pub fn attack_system(
                 Err(_) => return, // Position 컴포넌트가 없으면 스킵
             };
             let dir = if let Ok(target_position) = query_position.get(attack.target) {
-                (**position - **target_position).normalize_or_zero()
+                (**target_position - **position).normalize_or_zero()
             } else {
                 Vec2::ZERO
             };
-            movement.dir_vec = dir;
+            movement.preferred_dir = dir;
             // 공격 쿨다운 감소
             attack.cooldown -= delta_time;
             if attack.cooldown <= 0.0 {

@@ -6,6 +6,8 @@ pub mod nav_system;
 
 use bevy::prelude::*;
 
+use crate::prelude::*;
+
 pub struct MovementPlugin;
 
 impl Plugin for MovementPlugin {
@@ -16,6 +18,7 @@ impl Plugin for MovementPlugin {
                 nav_system::flow_field_added_system,
                 nav_system::update_flow_field_system,
                 nav_system::flow_movement_system,
+                move_system::update_avoid_resp_system,
                 move_system::avoid_system,
                 move_system::delayed_stop_system,
                 nav_system::remove_empty_orders_system,
@@ -29,4 +32,17 @@ impl Plugin for MovementPlugin {
                 .chain(),
         );
     }
+}
+
+pub fn set_moving(commands: &mut Commands, entity: Entity, moving: Moving) {
+    commands.entity(entity).insert(moving);
+    commands.entity(entity).remove::<Stopped>();
+    commands.entity(entity).remove::<DelayedStopTrigger>();
+}
+
+pub fn set_stopped(commands: &mut Commands, entity: Entity, stopped: Stopped) {
+    commands.entity(entity).insert(stopped);
+    commands.entity(entity).remove::<Moving>();
+    commands.entity(entity).remove::<DelayedStopTrigger>();
+    commands.entity(entity).remove::<Attack>();
 }

@@ -1,11 +1,26 @@
 use bevy::prelude::*;
 
-#[derive(Component, Debug, Clone, Copy, Default)]
+use crate::prelude::STOP_RESP;
+
+#[derive(Component, Debug, Clone, Copy)]
 pub struct UnitMovement {
     pub speed: f32,           // 유닛의 현재 이동 속도
     pub preferred_speed: f32, // 유닛이 선호하는 이동 속도 (avoidance 등으로 인해 실제 이동 속도와 다를 수 있음)
     pub dir_vec: Vec2,        // 유닛이 현재 이동하는 방향 벡터
     pub preferred_dir: Vec2, // 유닛이 선호하는 이동 방향 (avoidance 등으로 인해 실제 이동 방향과 다를 수 있음)
+    pub avoid_resp: f32,     // 유닛이 장애물을 피하는 정도
+}
+
+impl Default for UnitMovement {
+    fn default() -> Self {
+        Self {
+            speed: 0.0,
+            preferred_speed: 0.0,
+            dir_vec: Vec2::ZERO,
+            preferred_dir: Vec2::ZERO,
+            avoid_resp: STOP_RESP,
+        }
+    }
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -18,7 +33,7 @@ pub struct Moving {
 pub struct Stopped {
     pub stop_position: Vec2,        // 유닛이 멈춘 위치
     pub in_range: bool,             // stop_position과 범위 안에 있는지 여부
-    pub pos_renew_delay: f32,       // stop_position 갱신 지연 시간 (초)
+    pub out_of_range_time: f32,     // stop_position 갱신 지연 시간 (초)
     pub last_field: Option<Entity>, // 마지막으로 따랐던 FlowField 엔티티
 }
 

@@ -60,6 +60,20 @@ pub fn mouse_input(
     state.right_released = buttons.just_released(MouseButton::Right);
 }
 
+pub fn screen_to_ground(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    screen_position: Vec2,
+) -> Option<Vec2> {
+    let ray = camera
+        .viewport_to_world(camera_transform, screen_position)
+        .ok()?;
+
+    let distance = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))?;
+    let hit = ray.get_point(distance);
+    Some(Vec2::new(hit.x, hit.z))
+}
+
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {

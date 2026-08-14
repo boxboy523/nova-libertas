@@ -1,25 +1,18 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+use crate::prelude::*;
+
+#[derive(Debug, Clone, Deref, DerefMut)]
 pub struct AnimationSet {
-    pub stand: AnimationData,
-    pub moving: Option<AnimationData>,
-    pub attacking: Option<AnimationData>,
-}
-
-impl AnimationSet {
-    pub fn get_data(&self, kind: AnimationKind) -> &AnimationData {
-        match kind {
-            AnimationKind::Stand => &self.stand,
-            AnimationKind::Move => self.moving.as_ref().unwrap_or(&self.stand),
-            AnimationKind::Attack => self.attacking.as_ref().unwrap_or(&self.stand),
-        }
-    }
+    pub animations: HashMap<AnimationKind, AnimationData>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AnimationData {
-    pub material: Handle<StandardMaterial>,
+    pub material: HashMap<Team, Handle<TeamColorMaterial>>,
     pub frame_meshes: Vec<AnimationFrameMesh>,
     pub columns: u32,
     pub rows: u32,
@@ -34,11 +27,22 @@ pub struct AnimationFrameMesh {
     pub flipped: Handle<Mesh>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AnimationKind {
     Stand,
     Move,
     Attack,
+}
+
+impl AnimationKind {
+    pub fn default_file(&self) -> PathBuf {
+        match self {
+            AnimationKind::Stand => PathBuf::from("stand.png"),
+            AnimationKind::Move => PathBuf::from("move.png"),
+            AnimationKind::Attack => PathBuf::from("attack.png"),
+        }
+    }
 }
 
 #[derive(Component, Debug, Clone)]
@@ -49,11 +53,10 @@ pub struct AnimationState {
     pub timer: Timer,
     pub frame: u32,
     pub frame_count: u32,
-    pub dir_idx: u32,
     pub columns: u32,
     pub rows: u32,
     pub looping: bool,
-    pub fliped: bool,
+    pub facing_oct: u32,
 }
 
 impl AnimationState {

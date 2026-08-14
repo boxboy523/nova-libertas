@@ -17,14 +17,14 @@ pub mod prelude {
     };
     pub use crate::constants::*;
     pub use crate::debug::DebugPlugin;
-    pub use crate::input::{mouse_input, InputPlugin, MouseState};
+    pub use crate::input::{mouse_input, screen_to_ground, InputPlugin, MouseState};
     pub use crate::movement::{
         component::{
             DelayedStopTrigger, FieldFollowTarget, FlowField, Moving, Stopped, UnitMovement,
         },
         event::MoveOrderEvent,
         flow_grid::FlowGrid,
-        MovementPlugin,
+        set_moving, set_stopped, MovementPlugin,
     };
     pub use crate::thing::{ThingCatalog, ThingInfo, ThingType};
     pub use crate::ui::UIPlugin;
@@ -40,6 +40,7 @@ pub mod prelude {
             CurrentAnimation,
         },
         info::{SpriteConfig, SpriteInfo, SpriteInfoKind},
+        team_color::TeamColorMaterial,
         SpriteCatalog, SpritePlugin, UnitVisual, UnitVisualKind,
     };
     pub use crate::world3d::{create_atlas_quad, spawn_billboard, World3DPlugin};
@@ -63,12 +64,16 @@ use bevy::prelude::*;
 use prelude::*;
 
 pub fn setup(mut commands: Commands) {
-    for i in 0..5 {
-        for j in 0..5 {
+    for i in 1..7 {
+        for j in 1..7 {
             commands.trigger(SpawnUnitEvent {
                 position: Vec2::new(i as f32 * 40.0 + 40.0, j as f32 * 40.0 + 40.0),
                 t_type: ThingType::AttackerGun,
-                team: Team::Player,
+                team: if (i + j) % 2 == 0 {
+                    Team::Player
+                } else {
+                    Team::Enemy
+                },
                 hp: 100.0,
             });
         }

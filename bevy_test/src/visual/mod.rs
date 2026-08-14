@@ -6,6 +6,7 @@ use bevy::prelude::*;
 pub mod data;
 pub mod info;
 pub mod system;
+pub mod team_color;
 
 #[derive(Debug, Clone)]
 pub struct UnitVisual {
@@ -17,12 +18,30 @@ impl UnitVisual {
     pub fn get_mesh_mat(
         &self,
         kind: Option<AnimationKind>,
-    ) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+        team: Option<Team>,
+    ) -> (Handle<Mesh>, Handle<TeamColorMaterial>) {
         match &self.kind {
-            UnitVisualKind::Simple { mesh, material, .. } => (mesh.clone(), material.clone()),
+            UnitVisualKind::Simple { mesh, material, .. } => (
+                mesh.clone(),
+                material
+                    .get(&team.unwrap_or(Team::Neutral))
+                    .expect("Material not found for team")
+                    .clone(),
+            ),
             UnitVisualKind::AnimationSet(animation_set) => {
-                let data = animation_set.get_data(kind.unwrap_or(AnimationKind::Stand));
-                (data.frame_meshes[0].normal.clone(), data.material.clone())
+                let Some(data) = animation_set
+                    .animations
+                    .get(&kind.unwrap_or(AnimationKind::Stand))
+                else {
+                    panic!("Animation data not found for kind: {:?}", kind);
+                };
+                (
+                    data.frame_meshes[0].normal.clone(),
+                    data.material
+                        .get(&team.unwrap_or(Team::Neutral))
+                        .expect("Material not found for team")
+                        .clone(),
+                )
             }
         }
     }
@@ -31,7 +50,7 @@ impl UnitVisual {
 #[derive(Debug, Clone)]
 pub enum UnitVisualKind {
     Simple {
-        material: Handle<StandardMaterial>,
+        material: HashMap<Team, Handle<TeamColorMaterial>>,
         mesh: Handle<Mesh>,
     },
     AnimationSet(AnimationSet),
@@ -55,6 +74,7 @@ impl Plugin for SpritePlugin {
                     system::change_animation_system,
                     system::look_dir_system,
                     system::animation_system,
+                    system::update_cur_anim_system,
                 )
                     .chain(),
             );

@@ -39,7 +39,10 @@ pub fn spawn_units_trigger(
                 ..Default::default()
             },
             UnitMovement::default(),
-            UnitHp(event.hp),
+            UnitHp {
+                current: event.hp,
+                max: event.hp,
+            },
             event.t_type,
         ))
         .id();
@@ -50,7 +53,7 @@ pub fn spawn_units_trigger(
         );
         return;
     };
-    spawn_billboard(&mut commands, unit_visual, e);
+    spawn_billboard(&mut commands, unit_visual, e, Some(event.team));
     commands
         .entity(e)
         .insert(CurrentAnimation(AnimationKind::Stand));
@@ -74,29 +77,5 @@ pub fn spawn_wall_trigger(
     };
 
     commands.entity(e).insert((transform,));
-    spawn_billboard(&mut commands, visual, e);
-}
-
-pub fn despawn_order_trigger(
-    remove: On<Remove, FlowField>,
-    mut commands: Commands,
-    triggered: Query<&DelayedStopTrigger>,
-    query: Query<(Entity, &Position, &Moving)>,
-) {
-    query
-        .iter()
-        .filter(|(_, _, moving)| moving.field == remove.entity)
-        .for_each(|(entity, position, _)| {
-            commands.entity(entity).remove::<Moving>();
-            commands.entity(entity).remove::<Attack>();
-            if triggered.contains(entity) {
-                commands.entity(entity).remove::<DelayedStopTrigger>();
-            }
-            commands.entity(entity).insert(Stopped {
-                stop_position: **position,
-                in_range: true,
-                pos_renew_delay: 0.0,
-                last_field: Some(remove.entity),
-            });
-        });
+    spawn_billboard(&mut commands, visual, e, None);
 }

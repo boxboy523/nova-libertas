@@ -45,7 +45,7 @@ impl FlowGrid {
         let grid_goal_x = (flow_field.goal.x / self.cell_size).floor() as usize;
         let grid_goal_y = (flow_field.goal.y / self.cell_size).floor() as usize;
         if grid_x == grid_goal_x && grid_y == grid_goal_y {
-            return Some(Vec2::ZERO);
+            return Some((flow_field.goal - position).normalize_or_zero());
         }
 
         let tx = gx - grid_x as f32;

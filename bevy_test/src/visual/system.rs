@@ -6,7 +6,7 @@ pub fn sprite_catalog_startup_system(
     mut catalog: ResMut<SpriteCatalog>,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<TeamColorMaterial>>,
 ) {
     ThingType::iter().for_each(|t_type| {
         let info_path = t_type.get_path();
@@ -20,100 +20,37 @@ pub fn sprite_catalog_startup_system(
         let visual_kind = match sprite_conf.sprite_info.kind {
             SpriteInfoKind::Simple { file } => {
                 let image = asset_server.load(info_asset_path.join(file));
-                let material = materials.add(StandardMaterial {
-                    base_color_texture: Some(image),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Mask(0.1),
-                    cull_mode: None,
-                    ..default()
-                });
+                let material = TeamColorMaterial::get_team_hashmap(&image, &mut materials);
                 let mesh = meshes.add(Mesh::from(Rectangle::from_size(
                     sprite_conf.sprite_info.size,
                 )));
-                UnitVisualKind::Simple { material, mesh }
+                UnitVisualKind::Simple { mesh, material }
             }
 
-            SpriteInfoKind::AnimationSet(anim_info) => {
-                if anim_info.stand.frame_count > anim_info.stand.columns {
-                    panic!(
-                        "Stand animation frame count exceeds \
-                         the number of cells in the sprite sheet"
-                    );
+            SpriteInfoKind::AnimationSet { animations } => {
+                if !animations.contains_key(&AnimationKind::Stand) {
+                    panic!("AnimationSet must contain a 'stand' animation for {:?}", t_type);
                 }
-
-                let image = asset_server
-                    .load(info_asset_path.join(anim_info.stand.file.unwrap_or("stand.png".into())));
-                let material = materials.add(StandardMaterial {
-                    base_color_texture: Some(image),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Mask(0.1),
-                    cull_mode: None,
-                    ..default()
-                });
-
-                let mut mesh_vec = Vec::new();
-
-                for row in 0..anim_info.stand.rows {
-                    for col in 0..anim_info.stand.columns {
-                        let normal = meshes.add(create_atlas_quad(
-                            sprite_conf.sprite_info.size,
-                            anim_info.stand.columns,
-                            anim_info.stand.rows,
-                            col,
-                            row,
-                            false,
-                            sprite_conf.sprite_info.offset,
-                        ));
-                        let flipped = meshes.add(create_atlas_quad(
-                            sprite_conf.sprite_info.size,
-                            anim_info.stand.columns,
-                            anim_info.stand.rows,
-                            col,
-                            row,
-                            true,
-                            sprite_conf.sprite_info.offset,
-                        ));
-                        mesh_vec.push(AnimationFrameMesh { normal, flipped });
-                    }
-                }
-
-                let stand_clip = AnimationData {
-                    material,
-                    frame_meshes: mesh_vec,
-                    columns: anim_info.stand.columns,
-                    rows: anim_info.stand.rows,
-                    frame_count: anim_info.stand.frame_count,
-                    fps: anim_info.stand.fps,
-                    looping: anim_info.stand.looping,
-                };
-
-                let moving_clip = anim_info.moving.map(|moving_info| {
-                    if moving_info.frame_count > moving_info.columns {
+                UnitVisualKind::AnimationSet(AnimationSet{ animations: animations.iter().map(|(kind, anim_info)| {
+                    if anim_info.frame_count > anim_info.columns {
                         panic!(
-                            "Moving animation frame count exceeds \
-                             the number of cells in the sprite sheet"
+                            "Animation frame count exceeds the number of cells in the sprite sheet for {:?}",
+                            kind
                         );
                     }
 
-                    let image = asset_server
-                        .load(info_asset_path.join(moving_info.file.unwrap_or("move.png".into())));
+                    let image = asset_server.load(info_asset_path.join(anim_info.file.clone().unwrap_or(kind.default_file())));
 
-                    let material = materials.add(StandardMaterial {
-                        base_color_texture: Some(image),
-                        unlit: true,
-                        alpha_mode: AlphaMode::Mask(0.1),
-                        cull_mode: None,
-                        ..default()
-                    });
+                    let material = TeamColorMaterial::get_team_hashmap(&image, &mut materials);
 
                     let mut mesh_vec = Vec::new();
 
-                    for row in 0..moving_info.rows {
-                        for col in 0..moving_info.columns {
+                    for row in 0..anim_info.rows {
+                        for col in 0..anim_info.columns {
                             let normal = meshes.add(create_atlas_quad(
                                 sprite_conf.sprite_info.size,
-                                moving_info.columns,
-                                moving_info.rows,
+                                anim_info.columns,
+                                anim_info.rows,
                                 col,
                                 row,
                                 false,
@@ -121,8 +58,8 @@ pub fn sprite_catalog_startup_system(
                             ));
                             let flipped = meshes.add(create_atlas_quad(
                                 sprite_conf.sprite_info.size,
-                                moving_info.columns,
-                                moving_info.rows,
+                                anim_info.columns,
+                                anim_info.rows,
                                 col,
                                 row,
                                 true,
@@ -132,79 +69,16 @@ pub fn sprite_catalog_startup_system(
                         }
                     }
 
-                    AnimationData {
+                    (kind.clone(), AnimationData {
                         material,
                         frame_meshes: mesh_vec,
-                        columns: moving_info.columns,
-                        rows: moving_info.rows,
-                        frame_count: moving_info.frame_count,
-                        fps: moving_info.fps,
-                        looping: moving_info.looping,
-                    }
-                });
-
-                let attacking_clip = anim_info.attacking.map(|attacking_info| {
-                    if attacking_info.frame_count > attacking_info.columns {
-                        panic!(
-                            "Attacking animation frame count exceeds \
-                                 the number of cells in the sprite sheet"
-                        );
-                    }
-
-                    let image = asset_server.load(
-                        info_asset_path.join(attacking_info.file.unwrap_or("attack.png".into())),
-                    );
-
-                    let material = materials.add(StandardMaterial {
-                        base_color_texture: Some(image),
-                        unlit: true,
-                        alpha_mode: AlphaMode::Mask(0.1),
-                        cull_mode: None,
-                        ..default()
-                    });
-
-                    let mut mesh_vec = Vec::new();
-
-                    for row in 0..attacking_info.rows {
-                        for col in 0..attacking_info.columns {
-                            let normal = meshes.add(create_atlas_quad(
-                                sprite_conf.sprite_info.size,
-                                attacking_info.columns,
-                                attacking_info.rows,
-                                col,
-                                row,
-                                false,
-                                sprite_conf.sprite_info.offset,
-                            ));
-                            let flipped = meshes.add(create_atlas_quad(
-                                sprite_conf.sprite_info.size,
-                                attacking_info.columns,
-                                attacking_info.rows,
-                                col,
-                                row,
-                                true,
-                                sprite_conf.sprite_info.offset,
-                            ));
-                            mesh_vec.push(AnimationFrameMesh { normal, flipped });
-                        }
-                    }
-
-                    AnimationData {
-                        material,
-                        frame_meshes: mesh_vec,
-                        columns: attacking_info.columns,
-                        rows: attacking_info.rows,
-                        frame_count: attacking_info.frame_count,
-                        fps: attacking_info.fps,
-                        looping: attacking_info.looping,
-                    }
-                });
-
-                UnitVisualKind::AnimationSet(AnimationSet {
-                    stand: stand_clip,
-                    moving: moving_clip,
-                    attacking: attacking_clip,
-                })
+                        columns: anim_info.columns,
+                        rows: anim_info.rows,
+                        frame_count: anim_info.frame_count,
+                        fps: anim_info.fps,
+                        looping: anim_info.looping,
+                    })
+                }).collect()})
             }
         };
 
@@ -237,18 +111,30 @@ pub fn look_dir_system(
             if movement.speed < 1.0 {
                 return;
             }
-            let world_dir = Vec3::new(movement.dir_vec.x, 0.0, movement.dir_vec.y).normalize();
+            let world_dir =
+                Vec3::new(movement.preferred_dir.x, 0.0, movement.preferred_dir.y).normalize();
             let camera_right = camera.right().as_vec3();
             let camera_up = camera.up().as_vec3();
             let screen_dir = Vec2::new(world_dir.dot(camera_right), world_dir.dot(camera_up));
-            let (row, flip) = dir_to_row(screen_dir);
-            anim_state.fliped = flip;
-            anim_state.dir_idx = row;
+            let angle = screen_dir.to_angle();
+            let current_center = anim_state.facing_oct as f32 * (std::f32::consts::FRAC_PI_4);
+            let delta = (angle - current_center + std::f32::consts::PI)
+                .rem_euclid(std::f32::consts::TAU)
+                - std::f32::consts::PI;
+            if delta.abs() < SWITCH_FACE_ANGLE {
+                return;
+            }
+            anim_state.facing_oct = (angle / std::f32::consts::FRAC_PI_4)
+                .round()
+                .rem_euclid(8.0) as u32;
+            let (row, flip) = oct_to_row(anim_state.facing_oct);
             if let Some(unit_visual) = catalog.sprites.get(t_type) {
                 if let UnitVisualKind::AnimationSet(animation_set) = &unit_visual.kind {
                     if let Some(cur_anim) = cur_anim_opt {
-                        let data = animation_set.get_data(cur_anim.0);
-                        *mesh = Mesh3d(if anim_state.fliped {
+                        let data = animation_set
+                            .get(&cur_anim.0)
+                            .unwrap_or(animation_set.get(&AnimationKind::Stand).unwrap());
+                        *mesh = Mesh3d(if flip {
                             data.frame_meshes
                                 [(anim_state.columns * row + anim_state.frame) as usize]
                                 .flipped
@@ -290,12 +176,15 @@ pub fn animation_system(
                     }
                 }
 
-                let index = (anim_state.columns * anim_state.dir_idx + anim_state.frame) as usize;
+                let (row, flip) = oct_to_row(anim_state.facing_oct);
+                let index = (anim_state.columns * row + anim_state.frame) as usize;
                 if let Some(unit_sprite) = catalog.sprites.get(t_type) {
                     if let UnitVisualKind::AnimationSet(animation_set) = &unit_sprite.kind {
                         if let Some(cur_anim) = cur_anim_opt {
-                            let data = animation_set.get_data(cur_anim.0);
-                            *mesh = Mesh3d(if anim_state.fliped {
+                            let data = animation_set
+                                .get(&cur_anim.0)
+                                .unwrap_or(animation_set.get(&AnimationKind::Stand).unwrap());
+                            *mesh = Mesh3d(if flip {
                                 data.frame_meshes[index].flipped.clone()
                             } else {
                                 data.frame_meshes[index].normal.clone()
@@ -314,35 +203,85 @@ pub fn change_animation_system(
             Entity,
             &ThingType,
             &CurrentAnimation,
+            Option<&AnimationState>,
             &mut Mesh3d,
-            &mut MeshMaterial3d<StandardMaterial>,
+            &mut MeshMaterial3d<TeamColorMaterial>,
+            Option<&Team>,
         ),
         Changed<CurrentAnimation>,
     >,
     catalog: Res<SpriteCatalog>,
 ) {
-    query
-        .iter_mut()
-        .for_each(|(entity, t_type, current_anim, mut mesh, mut material)| {
+    query.iter_mut().for_each(
+        |(entity, t_type, current_anim, opt_anim_state, mut mesh, mut material, team)| {
             if let Some(unit_visual) = catalog.sprites.get(t_type) {
                 if let UnitVisualKind::AnimationSet(animation_set) = &unit_visual.kind {
-                    let data = animation_set.get_data(current_anim.0);
-                    material.0 = data.material.clone();
-                    mesh.0 = data.frame_meshes[0].normal.clone();
-                    commands
-                        .entity(entity)
-                        .insert(AnimationState::from_data(data));
+                    let data = animation_set
+                        .get(&current_anim.0)
+                        .unwrap_or(animation_set.get(&AnimationKind::Stand).unwrap());
+                    material.0 = data
+                        .material
+                        .get(&team.unwrap_or(&Team::Neutral))
+                        .expect("Material not found for team")
+                        .clone();
+
+                    let mut new_anim_state = AnimationState::from_data(data);
+                    if let Some(old_state) = opt_anim_state {
+                        new_anim_state.facing_oct = old_state.facing_oct;
+                        let (row, flip) = oct_to_row(new_anim_state.facing_oct);
+                        mesh.0 = if flip {
+                            data.frame_meshes[(data.columns * row) as usize]
+                                .flipped
+                                .clone()
+                        } else {
+                            data.frame_meshes[(data.columns * row) as usize]
+                                .normal
+                                .clone()
+                        };
+                    } else {
+                        mesh.0 = data.frame_meshes[0].normal.clone();
+                    }
+                    commands.entity(entity).insert(new_anim_state);
                 }
+            }
+        },
+    );
+}
+
+pub fn update_cur_anim_system(
+    mut query_moving: Query<
+        (&mut CurrentAnimation, Option<&Attack>),
+        (Added<Moving>, Without<Stopped>),
+    >,
+    mut query_stopped: Query<
+        (&mut CurrentAnimation, &Stopped),
+        (Changed<Stopped>, Without<Moving>),
+    >,
+) {
+    query_moving
+        .iter_mut()
+        .for_each(|(mut cur_anim, attack_opt)| {
+            if let Some(attack) = attack_opt {
+                if attack.attacking {
+                    *cur_anim = CurrentAnimation(AnimationKind::Attack);
+                }
+                return;
+            }
+            *cur_anim = CurrentAnimation(AnimationKind::Move);
+        });
+
+    query_stopped
+        .iter_mut()
+        .for_each(|(mut cur_anim, stopped)| {
+            if stopped.in_range {
+                *cur_anim = CurrentAnimation(AnimationKind::Stand);
+            } else {
+                *cur_anim = CurrentAnimation(AnimationKind::Move);
             }
         });
 }
 
-fn dir_to_row(dir: Vec2) -> (u32, bool) {
-    let angle = dir.to_angle();
-    let oct = (angle / (std::f32::consts::PI / 4.0))
-        .round()
-        .rem_euclid(8.0) as u32;
-
+fn oct_to_row(oct: u32) -> (u32, bool) {
     match oct {
         0 => (2, true),  // Right
         1 => (3, true),  // Up-Right

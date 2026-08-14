@@ -57,8 +57,8 @@ pub fn damage_trigger(
     mut query: Query<(Entity, &mut UnitHp)>,
 ) {
     if let Ok((_, mut hp)) = query.get_mut(event.receiver) {
-        hp.0 -= event.damage;
-        if hp.0 <= 0.0 {
+        hp.current -= event.damage;
+        if hp.current <= 0.0 {
             commands.entity(event.receiver).insert(Dead);
             commands.entity(event.receiver).remove::<Moving>();
             commands.entity(event.receiver).remove::<Attack>();
