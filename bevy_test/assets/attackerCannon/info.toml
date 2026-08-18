@@ -1,11 +1,11 @@
-t_type = "AttackerGun"
+t_type = "AttackerCannon"
 [sprite_info]
 type = "animation_set"
-size = [30.0, 30.0]
-offset = [0.0, -7.0]
+size = [45.0, 45.0]
+offset = [0.0, -12.0]
 
 [sprite_info.animations.stand]
-cell_size = [196, 196]
+cell_size = [288, 288]
 columns = 1
 rows = 5
 frame_count = 1
@@ -13,7 +13,7 @@ fps = 1.0
 looping = true
 
 [sprite_info.animations.move]
-cell_size = [196, 196]
+cell_size = [288, 288]
 columns = 4
 rows = 5
 frame_count = 4
@@ -21,10 +21,10 @@ fps = 8.0
 looping = true
 
 [sprite_info.animations.attack]
-cell_size = [196, 196]
-columns = 3
+cell_size = [288, 288]
+columns = 2
 rows = 5
-frame_count = 3
+frame_count = 2
 fps = 6.0
 looping = true
 
@@ -33,7 +33,9 @@ muzzle = [0.0, 20.0]
 hit = [0.0, 20.0]
 
 [battle_stats.attack_type]
-kind = "instant"
+kind = "projectile"
+speed = 100.0
+hit_radius = 5.0
 
 [unit_stats]
 size = 10.0
@@ -42,6 +44,6 @@ acceleration = 200.0
 max_hp = 100.0
 
 [battle_stats]
-range = 100.0
+range = 300.0
 damage = 10.0
 cooldown = 1.0

@@ -11,7 +11,7 @@ pub mod world3d;
 
 pub mod prelude {
     pub use crate::combat::{
-        component::{Attack, AutoAttack, UnitBattleStats, UnitHp},
+        component::{Attack, AutoAttack, Projectile, UnitBattleStats, UnitHp},
         event::{AttackOrderEvent, DamageEvent},
         CombatPlugin,
     };
@@ -39,7 +39,7 @@ pub mod prelude {
             AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState,
             CurrentAnimation,
         },
-        info::{SpriteConfig, SpriteInfo, SpriteInfoKind},
+        info::{SpriteConfig, SpriteInfo, SpriteInfoKind, VisualAnchor},
         team_color::TeamColorMaterial,
         SpriteCatalog, SpritePlugin, UnitVisual, UnitVisualKind,
     };
@@ -68,7 +68,11 @@ pub fn setup(mut commands: Commands) {
         for j in 1..7 {
             commands.trigger(SpawnUnitEvent {
                 position: Vec2::new(i as f32 * 40.0 + 40.0, j as f32 * 40.0 + 40.0),
-                t_type: ThingType::AttackerGun,
+                t_type: if i % 2 == 0 {
+                    ThingType::AttackerGun
+                } else {
+                    ThingType::AttackerCannon
+                },
                 team: if (i + j) % 2 == 0 {
                     Team::Player
                 } else {

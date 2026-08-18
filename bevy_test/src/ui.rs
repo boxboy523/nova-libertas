@@ -168,15 +168,17 @@ fn selection_system(
 fn move_selected_units(
     mut commands: Commands,
     state: Res<MouseState>,
+    keys: Res<ButtonInput<KeyCode>>,
     query_select: Query<Entity, With<Selected>>,
 ) {
-    if state.right_just_pressed {
+    let auto_attack = keys.just_pressed(KeyCode::KeyA);
+    if state.right_just_pressed || auto_attack {
         let selected_units = query_select.iter().collect::<HashSet<_>>();
         if !selected_units.is_empty() {
             commands.trigger(MoveOrderEvent {
                 target_position: state.world_position,
                 units: selected_units,
-                auto_attack: false,
+                auto_attack: auto_attack,
             });
         }
     }

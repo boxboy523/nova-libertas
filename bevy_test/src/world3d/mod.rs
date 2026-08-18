@@ -3,8 +3,11 @@ use bevy::{mesh::VertexAttributeValues, prelude::*};
 
 pub struct World3DPlugin;
 
-#[derive(Component)]
-pub struct Billboard;
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct Billboard {
+    pub roll: f32,
+    roll_offset: f32,
+}
 
 impl Plugin for World3DPlugin {
     fn build(&self, app: &mut App) {
@@ -66,18 +69,24 @@ pub fn spawn_billboard(
     team: Option<Team>,
 ) {
     let (mesh, material) = visual.get_mesh_mat(None, team);
-    commands
-        .entity(target)
-        .insert((Mesh3d(mesh), MeshMaterial3d(material), Billboard));
+    commands.entity(target).insert((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Billboard {
+            roll: 0.0,
+            roll_offset: visual.roll_offset,
+        },
+    ));
 }
 
 fn billboard_system(
-    mut query: Query<&mut Transform, With<Billboard>>,
+    mut query: Query<(&mut Transform, &Billboard)>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
     let camera_rotation = camera.rotation();
-    query.iter_mut().for_each(|mut transform| {
-        transform.rotation = camera_rotation;
+    query.iter_mut().for_each(|(mut transform, billboard)| {
+        transform.rotation =
+            camera_rotation * Quat::from_rotation_z(billboard.roll + billboard.roll_offset);
     });
 }
 

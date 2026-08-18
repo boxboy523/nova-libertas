@@ -1,0 +1,7 @@
+t_type = "ProjWinged"
+[sprite_info]
+type = "simple"
+file = "projectile.png"
+size = [20.0, 20.0]
+offset = [0.0, 128.0]
+roll_offset_degrees = 180.0

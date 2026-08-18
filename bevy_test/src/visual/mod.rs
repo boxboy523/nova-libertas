@@ -12,6 +12,8 @@ pub mod team_color;
 pub struct UnitVisual {
     pub kind: UnitVisualKind,
     pub size: Vec2,
+    pub anchor: Option<VisualAnchor>,
+    pub roll_offset: f32,
 }
 
 impl UnitVisual {

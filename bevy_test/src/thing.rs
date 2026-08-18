@@ -8,7 +8,9 @@ use strum::{EnumIter, IntoEnumIterator};
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, Deserialize, Serialize)]
 pub enum ThingType {
     AttackerGun,
+    AttackerCannon,
     Wall,
+    ProjWinged,
 }
 
 impl ThingType {
@@ -19,7 +21,9 @@ impl ThingType {
     pub fn get_assets_path(&self) -> PathBuf {
         match self {
             ThingType::AttackerGun => PathBuf::from("attackerGun"),
+            ThingType::AttackerCannon => PathBuf::from("attackerCannon"),
             ThingType::Wall => PathBuf::from("wall"),
+            ThingType::ProjWinged => PathBuf::from("projectiles/projWinged"),
         }
     }
 

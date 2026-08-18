@@ -87,6 +87,8 @@ pub fn sprite_catalog_startup_system(
             UnitVisual {
                 kind: visual_kind,
                 size: sprite_conf.sprite_info.size,
+                anchor: sprite_conf.sprite_info.anchor,
+                roll_offset: sprite_conf.sprite_info.roll_offset_degrees.to_radians(),
             },
         );
     });
@@ -108,9 +110,7 @@ pub fn look_dir_system(
             if movement.preferred_dir.length_squared() < f32::EPSILON {
                 return;
             }
-            if movement.speed < 1.0 {
-                return;
-            }
+
             let world_dir =
                 Vec3::new(movement.preferred_dir.x, 0.0, movement.preferred_dir.y).normalize();
             let camera_right = camera.right().as_vec3();
@@ -169,11 +169,7 @@ pub fn animation_system(
             if anim_state.timer.just_finished() {
                 anim_state.frame += 1;
                 if anim_state.frame >= anim_state.frame_count {
-                    if anim_state.looping {
-                        anim_state.frame = 0;
-                    } else {
-                        anim_state.frame = anim_state.frame_count - 1;
-                    }
+                    anim_state.frame = 0;
                 }
 
                 let (row, flip) = oct_to_row(anim_state.facing_oct);
@@ -251,7 +247,7 @@ pub fn change_animation_system(
 pub fn update_cur_anim_system(
     mut query_moving: Query<
         (&mut CurrentAnimation, Option<&Attack>),
-        (Added<Moving>, Without<Stopped>),
+        (Or<(Added<Moving>, Changed<Attack>)>, Without<Stopped>),
     >,
     mut query_stopped: Query<
         (&mut CurrentAnimation, &Stopped),
@@ -262,7 +258,7 @@ pub fn update_cur_anim_system(
         .iter_mut()
         .for_each(|(mut cur_anim, attack_opt)| {
             if let Some(attack) = attack_opt {
-                if attack.attacking {
+                if attack.attacking && cur_anim.0 != AnimationKind::Attack {
                     *cur_anim = CurrentAnimation(AnimationKind::Attack);
                 }
                 return;

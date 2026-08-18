@@ -16,6 +16,7 @@ impl Plugin for CombatPlugin {
                     system::move_or_attack_system,
                     system::auto_attack_system,
                     system::attack_system,
+                    system::projectile_system,
                 )
                     .chain(),
             );

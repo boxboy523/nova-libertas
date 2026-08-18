@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{combat::component::AttackType, prelude::*, world3d::Billboard};
 use bevy::prelude::*;
 
 pub fn move_or_attack_system(
@@ -17,7 +17,7 @@ pub fn move_or_attack_system(
         .for_each(|(entity, position, mut attack, battle_stats, opt_auto)| {
             if let Ok(target_position) = query_position.get(attack.target) {
                 let dist_sq = position.distance_squared(**target_position);
-                if dist_sq < battle_stats.attack_range * battle_stats.attack_range {
+                if dist_sq < battle_stats.range * battle_stats.range {
                     attack.attacking = true;
                 } else {
                     attack.attacking = false;
@@ -45,7 +45,7 @@ pub fn auto_attack_system(
                 return; // 팀 정보를 가져올 수 없으면 건너뜀
             };
             let mut nearby_entities = if let Ok(entity_info_vec) =
-                spatial_grid.query_entities(**position, battle_stats.attack_range, true)
+                spatial_grid.query_entities(**position, battle_stats.range, true)
             {
                 entity_info_vec
                     .into_iter()
@@ -81,14 +81,20 @@ pub fn auto_attack_system(
 
 pub fn attack_system(
     mut commands: Commands,
-    mut attackers: Query<(Entity, &mut Attack, &mut UnitMovement, &UnitBattleStats)>,
+    mut attackers: Query<(
+        Entity,
+        &mut Attack,
+        &mut UnitMovement,
+        &UnitBattleStats,
+        Option<&VisualAnchor>,
+    )>,
     query_position: Query<&Position>,
     time: Res<Time>,
+    visual: Res<SpriteCatalog>,
 ) {
     let delta_time = time.delta_secs();
-    attackers
-        .iter_mut()
-        .for_each(|(entity, mut attack, mut movement, battle_stats)| {
+    attackers.iter_mut().for_each(
+        |(entity, mut attack, mut movement, battle_stats, opt_anchor)| {
             if attack.attacking == false {
                 return;
             }
@@ -105,13 +111,91 @@ pub fn attack_system(
             // 공격 쿨다운 감소
             attack.cooldown -= delta_time;
             if attack.cooldown <= 0.0 {
-                commands.trigger(DamageEvent {
-                    sender: entity,
-                    receiver: attack.target,
-                    damage: battle_stats.attack_damage,
-                });
+                match battle_stats.attack_type {
+                    AttackType::Instant => {
+                        // 즉시 공격 처리
+                        commands.trigger(DamageEvent {
+                            sender: entity,
+                            receiver: attack.target,
+                            damage: battle_stats.damage,
+                        });
+                    }
+                    AttackType::Projectile { speed } => {
+                        let anchor = opt_anchor.copied().unwrap_or_default();
+                        // 투사체 생성
+                        let proj = commands
+                            .spawn((
+                                Projectile {
+                                    sender: entity,
+                                    target: attack.target,
+                                    damage: battle_stats.damage,
+                                    speed,
+                                },
+                                Transform::from_xyz(position.x, anchor.muzzle.y, position.y),
+                                anchor,
+                            ))
+                            .id();
+                        let Some(proj_visual) = visual.sprites.get(&ThingType::ProjWinged) else {
+                            warn!("Projectile sprite not found in catalog");
+                            return;
+                        };
+                        spawn_billboard(&mut commands, proj_visual, proj, None);
+                    }
+                }
                 // 공격 후 쿨다운 초기화
-                attack.cooldown = battle_stats.attack_cooldown;
+                attack.cooldown = battle_stats.cooldown;
             }
-        });
+        },
+    );
+}
+
+pub fn projectile_system(
+    mut commands: Commands,
+    mut projectiles: Query<(
+        Entity,
+        &Projectile,
+        &mut Transform,
+        &mut Billboard,
+        &VisualAnchor,
+    )>,
+    query_position: Query<&Position>,
+    time: Res<Time>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
+) {
+    let delta_time = time.delta_secs();
+    projectiles.iter_mut().for_each(
+        |(entity, projectile, mut transform, mut billboard, anchor)| {
+            if let Ok(target_position) = query_position.get(projectile.target) {
+                let target_transform =
+                    Vec3::new(target_position.x, anchor.hit.y, target_position.y);
+                let offset = target_transform - transform.translation;
+                let screen_dir = Vec2::new(
+                    offset.dot(camera.right().as_vec3()),
+                    offset.dot(camera.up().as_vec3()),
+                )
+                .normalize_or_zero();
+                if screen_dir.length_squared() > f32::EPSILON {
+                    billboard.roll = screen_dir.to_angle();
+                }
+                let distance = offset.length();
+                let step = projectile.speed * delta_time;
+                // 목표 지점에 도달했는지 확인
+                if distance <= step {
+                    // DamageEvent 트리거
+                    commands.trigger(DamageEvent {
+                        sender: projectile.sender,
+                        receiver: projectile.target,
+                        damage: projectile.damage,
+                    });
+                    // 투사체 엔티티 제거
+                    commands.entity(entity).despawn();
+                } else {
+                    transform.translation += offset.normalize() * step;
+                }
+            } else {
+                // 목표가 존재하지 않으면 투사체 제거
+                commands.entity(entity).despawn();
+            }
+        },
+    );
 }

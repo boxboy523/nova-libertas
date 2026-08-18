@@ -57,6 +57,9 @@ pub fn spawn_units_trigger(
     commands
         .entity(e)
         .insert(CurrentAnimation(AnimationKind::Stand));
+    if let Some(anchor) = unit_visual.anchor {
+        commands.entity(e).insert(anchor);
+    }
 }
 
 #[derive(Event)]
