@@ -19,8 +19,9 @@ pub struct Selected; // 유닛이 선택되었는지 여부
 pub enum Team {
     Player,
     Enemy,
-    #[default]
     Neutral,
+    #[default]
+    Empty,
 }
 
 impl Team {
@@ -29,6 +30,7 @@ impl Team {
             Team::Player => Color::srgb(0.0, 0.5, 1.0),
             Team::Enemy => Color::srgb(1.0, 0.0, 0.0),
             Team::Neutral => Color::srgb(0.5, 0.5, 0.5),
+            Team::Empty => Color::srgb(0.0, 0.0, 0.0),
         }
     }
 }

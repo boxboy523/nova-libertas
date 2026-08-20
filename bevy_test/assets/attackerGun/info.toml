@@ -32,8 +32,11 @@ looping = true
 muzzle = [0.0, 20.0]
 hit = [0.0, 20.0]
 
-[battle_stats.attack_type]
+[battle_stats.delivery]
 kind = "instant"
+
+[battle_stats.impact]
+kind = "single"
 
 [unit_stats]
 size = 10.0

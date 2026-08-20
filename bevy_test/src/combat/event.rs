@@ -66,3 +66,36 @@ pub fn damage_trigger(
         }
     }
 }
+
+#[derive(Event)]
+pub struct ImpactEvent {
+    pub sender: Entity,
+    pub team: Team,
+    pub center: Vec2,
+    pub radius: f32,
+    pub damage: f32,
+}
+
+pub fn impact_trigger(
+    event: On<ImpactEvent>,
+    mut commands: Commands,
+    query: Query<(Entity, &Team), With<UnitHp>>,
+    spatial_grid: Res<SpatialGrid>,
+) {
+    spatial_grid
+        .query_entities(event.center, event.radius, false)
+        .unwrap_or_default()
+        .iter()
+        .for_each(|entity_info| {
+            if let Ok((entity, team)) = query.get(entity_info.entity) {
+                if team == &event.team {
+                    return; // 같은 팀이면 무시
+                }
+                commands.trigger(DamageEvent {
+                    sender: event.sender,
+                    receiver: entity,
+                    damage: event.damage,
+                });
+            }
+        });
+}

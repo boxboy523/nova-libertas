@@ -1,4 +1,11 @@
-use crate::{combat::component::AttackType, prelude::*, world3d::Billboard};
+use crate::{
+    combat::{
+        component::{AttackDelivery, AttackImpact},
+        event::ImpactEvent,
+    },
+    prelude::*,
+    world3d::Billboard,
+};
 use bevy::prelude::*;
 
 pub fn move_or_attack_system(
@@ -86,6 +93,7 @@ pub fn attack_system(
         &mut Attack,
         &mut UnitMovement,
         &UnitBattleStats,
+        &Team,
         Option<&VisualAnchor>,
     )>,
     query_position: Query<&Position>,
@@ -94,7 +102,7 @@ pub fn attack_system(
 ) {
     let delta_time = time.delta_secs();
     attackers.iter_mut().for_each(
-        |(entity, mut attack, mut movement, battle_stats, opt_anchor)| {
+        |(entity, mut attack, mut movement, battle_stats, team, opt_anchor)| {
             if attack.attacking == false {
                 return;
             }
@@ -111,17 +119,33 @@ pub fn attack_system(
             // 공격 쿨다운 감소
             attack.cooldown -= delta_time;
             if attack.cooldown <= 0.0 {
-                match battle_stats.attack_type {
-                    AttackType::Instant => {
-                        // 즉시 공격 처리
-                        commands.trigger(DamageEvent {
-                            sender: entity,
-                            receiver: attack.target,
-                            damage: battle_stats.damage,
-                        });
-                    }
-                    AttackType::Projectile { speed } => {
+                match battle_stats.delivery {
+                    AttackDelivery::Instant => match battle_stats.impact {
+                        AttackImpact::Single => {
+                            commands.trigger(DamageEvent {
+                                sender: entity,
+                                receiver: attack.target,
+                                damage: battle_stats.damage,
+                            });
+                        }
+                        AttackImpact::Area { radius } => {
+                            if let Ok(target_position) = query_position.get(attack.target) {
+                                commands.trigger(ImpactEvent {
+                                    sender: entity,
+                                    center: **target_position,
+                                    radius,
+                                    damage: battle_stats.damage,
+                                    team: *team,
+                                });
+                            }
+                        }
+                    },
+                    AttackDelivery::Projectile { speed, t_type } => {
                         let anchor = opt_anchor.copied().unwrap_or_default();
+                        let Some(proj_visual) = visual.sprites.get(&t_type) else {
+                            warn!("Projectile sprite not found in catalog");
+                            return;
+                        };
                         // 투사체 생성
                         let proj = commands
                             .spawn((
@@ -130,15 +154,12 @@ pub fn attack_system(
                                     target: attack.target,
                                     damage: battle_stats.damage,
                                     speed,
+                                    impact: battle_stats.impact,
+                                    team: *team,
                                 },
                                 Transform::from_xyz(position.x, anchor.muzzle.y, position.y),
-                                anchor,
                             ))
                             .id();
-                        let Some(proj_visual) = visual.sprites.get(&ThingType::ProjWinged) else {
-                            warn!("Projectile sprite not found in catalog");
-                            return;
-                        };
                         spawn_billboard(&mut commands, proj_visual, proj, None);
                     }
                 }
@@ -151,21 +172,17 @@ pub fn attack_system(
 
 pub fn projectile_system(
     mut commands: Commands,
-    mut projectiles: Query<(
-        Entity,
-        &Projectile,
-        &mut Transform,
-        &mut Billboard,
-        &VisualAnchor,
-    )>,
-    query_position: Query<&Position>,
+    mut projectiles: Query<(Entity, &Projectile, &mut Transform, &mut Billboard)>,
+    query_target: Query<(&Position, Option<&VisualAnchor>)>,
     time: Res<Time>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
     let delta_time = time.delta_secs();
-    projectiles.iter_mut().for_each(
-        |(entity, projectile, mut transform, mut billboard, anchor)| {
-            if let Ok(target_position) = query_position.get(projectile.target) {
+    projectiles
+        .iter_mut()
+        .for_each(|(entity, projectile, mut transform, mut billboard)| {
+            if let Ok((target_position, opt_anchor)) = query_target.get(projectile.target) {
+                let anchor = opt_anchor.copied().unwrap_or_default();
                 let target_transform =
                     Vec3::new(target_position.x, anchor.hit.y, target_position.y);
                 let offset = target_transform - transform.translation;
@@ -181,12 +198,25 @@ pub fn projectile_system(
                 let step = projectile.speed * delta_time;
                 // 목표 지점에 도달했는지 확인
                 if distance <= step {
-                    // DamageEvent 트리거
-                    commands.trigger(DamageEvent {
-                        sender: projectile.sender,
-                        receiver: projectile.target,
-                        damage: projectile.damage,
-                    });
+                    match projectile.impact {
+                        AttackImpact::Single => {
+                            commands.trigger(DamageEvent {
+                                sender: projectile.sender,
+                                receiver: projectile.target,
+                                damage: projectile.damage,
+                            });
+                        }
+                        AttackImpact::Area { radius } => {
+                            commands.trigger(ImpactEvent {
+                                sender: projectile.sender,
+                                center: Vec2::new(target_position.x, target_position.y),
+                                radius,
+                                damage: projectile.damage,
+                                team: projectile.team,
+                            });
+                        }
+                    }
+
                     // 투사체 엔티티 제거
                     commands.entity(entity).despawn();
                 } else {
@@ -196,6 +226,5 @@ pub fn projectile_system(
                 // 목표가 존재하지 않으면 투사체 제거
                 commands.entity(entity).despawn();
             }
-        },
-    );
+        });
 }
