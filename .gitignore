@@ -1,5 +1,3 @@
-/rust/target
-.envrc
+target/
+.agent-shell/
 .direnv/
-/godot/.godot
-/bevy_test/target
