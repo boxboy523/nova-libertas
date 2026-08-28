@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::map::TerrainHeightMap;
+
 #[derive(Resource, Debug)]
 pub struct MouseState {
     pub window_position: Vec2,
@@ -33,6 +35,7 @@ pub fn mouse_input(
     buttons: Res<ButtonInput<MouseButton>>,
     window: Single<&Window>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    height_map: Res<TerrainHeightMap>,
     mut state: ResMut<MouseState>,
 ) {
     let Some(cursor) = window.cursor_position() else {
@@ -45,10 +48,10 @@ pub fn mouse_input(
         return;
     };
 
-    let Some(distance) = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y)) else {
+    let Some(hit) = height_map.raycast(&ray) else {
+        warn!("Mouse ray did not hit the terrain height map");
         return;
     };
-    let hit = ray.get_point(distance);
     state.world_position = Vec2::new(hit.x, hit.z);
     state.cursor_ray = ray;
     state.window_position = cursor;
@@ -63,14 +66,14 @@ pub fn mouse_input(
 pub fn screen_to_ground(
     camera: &Camera,
     camera_transform: &GlobalTransform,
+    height_map: &TerrainHeightMap,
     screen_position: Vec2,
 ) -> Option<Vec2> {
     let ray = camera
         .viewport_to_world(camera_transform, screen_position)
         .ok()?;
 
-    let distance = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))?;
-    let hit = ray.get_point(distance);
+    let hit = height_map.raycast(&ray)?;
     Some(Vec2::new(hit.x, hit.z))
 }
 

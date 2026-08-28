@@ -1,10 +1,22 @@
 use bevy::prelude::*;
+use chunk_flow_field::map::{CELL_BLOCKED, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP};
+
+use crate::map::GameMap;
 
 #[derive(Debug, Clone)]
 pub struct Ray {
     pub origin: Vec2,
     pub direction: Vec2,
     pub length: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CellInfo {
+    Wall,
+    Empty {
+        edge_mask: u8,
+        entity_vec: Vec<EntityInfo>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,7 +36,7 @@ pub enum RaycastResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CollisionResult {
-    Collided(Vec<EntityInfo>, Vec<(usize, usize)>),
+    Collided(Vec<EntityInfo>, Vec<(isize, isize)>),
     NoCollision,
     OutOfBounds,
 }
@@ -35,24 +47,33 @@ pub struct SpatialGrid {
     pub map_size: Vec2,
     pub width: usize,
     pub height: usize,
-    pub cells: Vec<Option<Vec<EntityInfo>>>, // None Means it is Wall Cell
+    pub cells: Vec<CellInfo>, // None Means it is Wall Cell
 }
 
 impl SpatialGrid {
-    pub fn new(map_width: f32, map_height: f32, cell_size: f32, walls: &[bool]) -> Self {
-        let width = (map_width / cell_size).ceil() as usize;
-        let height = (map_height / cell_size).ceil() as usize;
-        let mut cells = vec![None; width * height];
-        for (i, &is_wall) in walls.iter().enumerate() {
+    pub fn new(map: &GameMap) -> Self {
+        let mut cells = vec![CellInfo::Wall; map.width * map.height];
+        for (i, is_wall) in map
+            .landforms
+            .iter()
+            .map(|l| l.blocked_mask & CELL_BLOCKED != 0)
+            .enumerate()
+        {
             if !is_wall {
-                cells[i] = Some(Vec::with_capacity(16));
+                cells[i] = CellInfo::Empty {
+                    edge_mask: map.landforms[i].blocked_mask,
+                    entity_vec: Vec::with_capacity(16),
+                };
             }
         }
         Self {
-            map_size: Vec2::new(map_width, map_height),
-            cell_size,
-            width,
-            height,
+            map_size: Vec2::new(
+                map.width as f32 * map.cell_size,
+                map.height as f32 * map.cell_size,
+            ),
+            cell_size: map.cell_size,
+            width: map.width,
+            height: map.height,
             cells,
         }
     }
@@ -82,7 +103,11 @@ impl SpatialGrid {
         if grid_x >= self.width || grid_y >= self.height {
             return None; // 그리드 범위를 벗어남
         }
-        if let Some(entity_vec) = &self.cells[grid_y * self.width + grid_x] {
+        if let CellInfo::Empty {
+            edge_mask: _,
+            entity_vec,
+        } = &self.cells[grid_y * self.width + grid_x]
+        {
             let mut rtn = Vec::new();
             for e in entity_vec {
                 if (position - e.pos).length_squared() < e.radius.powi(2) {
@@ -99,141 +124,142 @@ impl SpatialGrid {
         }
     }
 
-    pub fn raycast(&self, ray: &Ray, exclude: Option<&[Entity]>) -> RaycastResult {
-        if ray.length <= 0.0 {
-            return RaycastResult::Miss;
-        }
-        let (mut grid_x, mut grid_y) = if let Some(grid) = self.world_to_grid(ray.origin) {
-            if let Some(vec) = self.cells[self.width * grid.1 + grid.0].as_ref() {
-                let mut len_current = ray.length;
-                let mut rtn = None;
-                for info in vec {
-                    if let Some(ex) = exclude {
-                        if ex.contains(&info.entity) {
-                            continue;
-                        }
-                    }
-                    if let Some(t) = circle_line_overlap(
-                        info.radius,
-                        info.pos,
-                        ray.origin,
-                        ray.origin + ray.direction * ray.length,
-                    ) {
-                        if t * ray.length < len_current {
-                            len_current = t * ray.length;
-                            rtn = Some(info.clone());
-                        }
-                    }
-                }
-                if rtn.is_some() {
-                    return RaycastResult::HitEntity(
-                        ray.origin + ray.direction * len_current,
-                        rtn.unwrap(),
-                    );
-                }
-            } else {
-                return RaycastResult::HitWall(ray.origin, Vec2::ZERO); // 시작점이 벽에 있음
-            }
-            grid
-        } else {
-            return RaycastResult::OutOfBounds; // 시작점이 그리드 범위를 벗어남
-        };
-        let step_x = ray.direction.x.signum() as isize;
-        let step_y = ray.direction.y.signum() as isize;
+    // Raycasting is not implemented for edge detection
+    // pub fn raycast(&self, ray: &Ray, exclude: Option<&[Entity]>) -> RaycastResult {
+    //     if ray.length <= 0.0 {
+    //         return RaycastResult::Miss;
+    //     }
+    //     let (mut grid_x, mut grid_y) = if let Some(grid) = self.world_to_grid(ray.origin) {
+    //         if let Some(vec) = self.cells[self.width * grid.1 + grid.0].as_ref() {
+    //             let mut len_current = ray.length;
+    //             let mut rtn = None;
+    //             for info in vec {
+    //                 if let Some(ex) = exclude {
+    //                     if ex.contains(&info.entity) {
+    //                         continue;
+    //                     }
+    //                 }
+    //                 if let Some(t) = circle_line_overlap(
+    //                     info.radius,
+    //                     info.pos,
+    //                     ray.origin,
+    //                     ray.origin + ray.direction * ray.length,
+    //                 ) {
+    //                     if t * ray.length < len_current {
+    //                         len_current = t * ray.length;
+    //                         rtn = Some(info.clone());
+    //                     }
+    //                 }
+    //             }
+    //             if rtn.is_some() {
+    //                 return RaycastResult::HitEntity(
+    //                     ray.origin + ray.direction * len_current,
+    //                     rtn.unwrap(),
+    //                 );
+    //             }
+    //         } else {
+    //             return RaycastResult::HitWall(ray.origin, Vec2::ZERO); // 시작점이 벽에 있음
+    //         }
+    //         grid
+    //     } else {
+    //         return RaycastResult::OutOfBounds; // 시작점이 그리드 범위를 벗어남
+    //     };
+    //     let step_x = ray.direction.x.signum() as isize;
+    //     let step_y = ray.direction.y.signum() as isize;
 
-        let ray_offset = ray.origin
-            - Vec2::new(
-                grid_x as f32 * self.cell_size,
-                grid_y as f32 * self.cell_size,
-            );
-        let mut total_x = if ray.direction.x.abs() > 0.0001 {
-            if ray.direction.x > 0.0 {
-                (self.cell_size - ray_offset.x) / ray.direction.x
-            } else {
-                ray_offset.x / -ray.direction.x
-            }
-        } else {
-            f32::MAX
-        };
-        let mut total_y = if ray.direction.y.abs() > 0.0001 {
-            if ray.direction.y > 0.0 {
-                (self.cell_size - ray_offset.y) / ray.direction.y
-            } else {
-                ray_offset.y / -ray.direction.y
-            }
-        } else {
-            f32::MAX
-        };
-        let delta_x = if ray.direction.x.abs() > 0.0001 {
-            self.cell_size / ray.direction.x.abs()
-        } else {
-            f32::MAX
-        };
-        let delta_y = if ray.direction.y.abs() > 0.0001 {
-            self.cell_size / ray.direction.y.abs()
-        } else {
-            f32::MAX
-        };
-        let mut len_last;
-        while total_x.min(total_y) < ray.length {
-            len_last = total_x.min(total_y);
-            if total_x < total_y {
-                let next_x = grid_x as isize + step_x;
-                if next_x >= self.width as isize || next_x < 0 {
-                    return RaycastResult::OutOfBounds;
-                }
-                grid_x = next_x as usize;
-                total_x += delta_x;
-            } else {
-                let next_y = grid_y as isize + step_y;
-                if next_y >= self.height as isize || next_y < 0 {
-                    return RaycastResult::OutOfBounds;
-                }
-                grid_y = next_y as usize;
-                total_y += delta_y;
-            }
-            let mut len_current = total_x.min(total_y);
-            let mut rtn = None;
-            if let Some(vec) = self
-                .cells
-                .get(self.width * grid_y + grid_x)
-                .and_then(|c| c.as_ref())
-            {
-                for info in vec {
-                    if let Some(ex) = exclude {
-                        if ex.contains(&info.entity) {
-                            continue;
-                        }
-                    }
-                    if let Some(t) = circle_line_overlap(
-                        info.radius,
-                        info.pos,
-                        ray.origin,
-                        ray.origin + ray.direction * ray.length,
-                    ) {
-                        if t * ray.length < len_current {
-                            len_current = t * ray.length;
-                            rtn = Some(info.clone());
-                        }
-                    }
-                }
-            } else {
-                let normal = if total_x < total_y {
-                    Vec2::new(-step_x as f32, 0.0)
-                } else {
-                    Vec2::new(0.0, -step_y as f32)
-                };
-                return RaycastResult::HitWall(ray.origin + ray.direction * len_last, normal);
-            }
-            if rtn.is_some() {
-                return RaycastResult::HitEntity(
-                    ray.origin + ray.direction * len_current,
-                    rtn.unwrap(),
-                );
-            }
-        }
-        RaycastResult::Miss
-    }
+    //     let ray_offset = ray.origin
+    //         - Vec2::new(
+    //             grid_x as f32 * self.cell_size,
+    //             grid_y as f32 * self.cell_size,
+    //         );
+    //     let mut total_x = if ray.direction.x.abs() > 0.0001 {
+    //         if ray.direction.x > 0.0 {
+    //             (self.cell_size - ray_offset.x) / ray.direction.x
+    //         } else {
+    //             ray_offset.x / -ray.direction.x
+    //         }
+    //     } else {
+    //         f32::MAX
+    //     };
+    //     let mut total_y = if ray.direction.y.abs() > 0.0001 {
+    //         if ray.direction.y > 0.0 {
+    //             (self.cell_size - ray_offset.y) / ray.direction.y
+    //         } else {
+    //             ray_offset.y / -ray.direction.y
+    //         }
+    //     } else {
+    //         f32::MAX
+    //     };
+    //     let delta_x = if ray.direction.x.abs() > 0.0001 {
+    //         self.cell_size / ray.direction.x.abs()
+    //     } else {
+    //         f32::MAX
+    //     };
+    //     let delta_y = if ray.direction.y.abs() > 0.0001 {
+    //         self.cell_size / ray.direction.y.abs()
+    //     } else {
+    //         f32::MAX
+    //     };
+    //     let mut len_last;
+    //     while total_x.min(total_y) < ray.length {
+    //         len_last = total_x.min(total_y);
+    //         if total_x < total_y {
+    //             let next_x = grid_x as isize + step_x;
+    //             if next_x >= self.width as isize || next_x < 0 {
+    //                 return RaycastResult::OutOfBounds;
+    //             }
+    //             grid_x = next_x as usize;
+    //             total_x += delta_x;
+    //         } else {
+    //             let next_y = grid_y as isize + step_y;
+    //             if next_y >= self.height as isize || next_y < 0 {
+    //                 return RaycastResult::OutOfBounds;
+    //             }
+    //             grid_y = next_y as usize;
+    //             total_y += delta_y;
+    //         }
+    //         let mut len_current = total_x.min(total_y);
+    //         let mut rtn = None;
+    //         if let Some(vec) = self
+    //             .cells
+    //             .get(self.width * grid_y + grid_x)
+    //             .and_then(|c| c.as_ref())
+    //         {
+    //             for info in vec {
+    //                 if let Some(ex) = exclude {
+    //                     if ex.contains(&info.entity) {
+    //                         continue;
+    //                     }
+    //                 }
+    //                 if let Some(t) = circle_line_overlap(
+    //                     info.radius,
+    //                     info.pos,
+    //                     ray.origin,
+    //                     ray.origin + ray.direction * ray.length,
+    //                 ) {
+    //                     if t * ray.length < len_current {
+    //                         len_current = t * ray.length;
+    //                         rtn = Some(info.clone());
+    //                     }
+    //                 }
+    //             }
+    //         } else {
+    //             let normal = if total_x < total_y {
+    //                 Vec2::new(-step_x as f32, 0.0)
+    //             } else {
+    //                 Vec2::new(0.0, -step_y as f32)
+    //             };
+    //             return RaycastResult::HitWall(ray.origin + ray.direction * len_last, normal);
+    //         }
+    //         if rtn.is_some() {
+    //             return RaycastResult::HitEntity(
+    //                 ray.origin + ray.direction * len_current,
+    //                 rtn.unwrap(),
+    //             );
+    //         }
+    //     }
+    //     RaycastResult::Miss
+    // }
 
     pub fn collision_check(
         &self,
@@ -249,8 +275,12 @@ impl SpatialGrid {
                 for x in (grid_x as isize - grid_radius)..=(grid_x as isize + grid_radius) {
                     if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
                         let idx = (y as usize) * self.width + (x as usize);
-                        if let Some(entities) = &self.cells[idx] {
-                            for entity in entities {
+                        if let CellInfo::Empty {
+                            edge_mask,
+                            entity_vec,
+                        } = &self.cells[idx]
+                        {
+                            for entity in entity_vec {
                                 if let Some(ex) = exclude {
                                     if ex.contains(&entity.entity) {
                                         continue;
@@ -262,6 +292,25 @@ impl SpatialGrid {
                                     collided_entities.push(entity.clone());
                                 }
                             }
+                            let min_x = x as f32 * self.cell_size;
+                            let max_x = min_x + self.cell_size;
+                            let min_y = y as f32 * self.cell_size;
+                            let max_y = min_y + self.cell_size;
+
+                            let faces_unit = (edge_mask & EDGE_TOP != 0 && position.y < min_y)
+                                || (edge_mask & EDGE_BOTTOM != 0 && position.y > max_y)
+                                || (edge_mask & EDGE_LEFT != 0 && position.x < min_x)
+                                || (edge_mask & EDGE_RIGHT != 0 && position.x > max_x);
+                            if faces_unit {
+                                let nearest_x = position.x.clamp(min_x, max_x);
+                                let nearest_y = position.y.clamp(min_y, max_y);
+
+                                let dist_sq = (position.x - nearest_x).powi(2)
+                                    + (position.y - nearest_y).powi(2);
+                                if dist_sq < radius.powi(2) {
+                                    collided_walls.push((x, y));
+                                }
+                            }
                         } else {
                             let cell_x = x as f32 * self.cell_size;
                             let cell_y = y as f32 * self.cell_size;
@@ -270,7 +319,7 @@ impl SpatialGrid {
                             let dist_sq =
                                 (position.x - nearest_x).powi(2) + (position.y - nearest_y).powi(2);
                             if dist_sq < radius.powi(2) {
-                                collided_walls.push((x as usize, y as usize));
+                                collided_walls.push((x, y));
                             }
                         }
                     }
@@ -291,8 +340,12 @@ impl SpatialGrid {
             .ok_or_else(|| anyhow::anyhow!("Entity position is out of grid bounds"))?;
         let idx = grid_y * self.width + grid_x;
         if idx < self.cells.len() {
-            if let Some(cell) = &mut self.cells[idx] {
-                cell.push(EntityInfo {
+            if let CellInfo::Empty {
+                edge_mask: _,
+                entity_vec,
+            } = &mut self.cells[idx]
+            {
+                entity_vec.push(EntityInfo {
                     entity,
                     radius,
                     pos,
@@ -304,8 +357,12 @@ impl SpatialGrid {
 
     pub fn clear(&mut self) {
         for cell in &mut self.cells {
-            if let Some(entities) = cell {
-                entities.clear();
+            if let CellInfo::Empty {
+                edge_mask: _,
+                entity_vec,
+            } = cell
+            {
+                entity_vec.clear();
             }
         }
     }
@@ -326,9 +383,13 @@ impl SpatialGrid {
             for x in (grid_x as isize - radius_in_cells)..=(grid_x as isize + radius_in_cells) {
                 if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
                     let idx = (y as usize) * self.width + (x as usize);
-                    if let Some(entities) = &self.cells[idx] {
+                    if let CellInfo::Empty {
+                        edge_mask: _,
+                        entity_vec,
+                    } = &self.cells[idx]
+                    {
                         result.extend(
-                            entities
+                            entity_vec
                                 .iter()
                                 .filter(|e| {
                                     (position - e.pos).length_squared()
@@ -356,8 +417,12 @@ impl SpatialGrid {
             for x in grid_min_x..=grid_max_x {
                 if x < self.width && y < self.height {
                     let idx = y * self.width + x;
-                    if let Some(entities) = &self.cells[idx] {
-                        result.extend(entities.iter().cloned());
+                    if let CellInfo::Empty {
+                        edge_mask: _,
+                        entity_vec,
+                    } = &self.cells[idx]
+                    {
+                        result.extend(entity_vec.iter().cloned());
                     }
                 }
             }
@@ -376,7 +441,7 @@ impl SpatialGrid {
             for x in (grid_x as isize - radius_in_cells)..=(grid_x as isize + radius_in_cells) {
                 if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
                     let idx = (y as usize) * self.width + (x as usize);
-                    if self.cells[idx].is_none() {
+                    if self.cells[idx] == CellInfo::Wall {
                         result.push((x as usize, y as usize));
                     }
                 }

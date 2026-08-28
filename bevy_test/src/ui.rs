@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::prelude::*;
+use crate::{map::TerrainHeightMap, prelude::*};
 use bevy::prelude::*;
 
 pub struct UIPlugin;
@@ -68,6 +68,7 @@ fn selection_system(
     mut drag_selection: Single<&mut DragSelection>,
     state: Res<MouseState>,
     spatial_grid: Res<SpatialGrid>,
+    height_map: Res<TerrainHeightMap>,
     query_select: Query<Entity, With<Selected>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     team_query: Query<&Team>,
@@ -117,7 +118,7 @@ fn selection_system(
         let mut max_world = Vec2::splat(f32::NEG_INFINITY);
 
         for corner in screen_corners.iter() {
-            if let Some(world_pos) = screen_to_ground(camera.0, camera.1, *corner) {
+            if let Some(world_pos) = screen_to_ground(camera.0, camera.1, &height_map, *corner) {
                 min_world = min_world.min(world_pos);
                 max_world = max_world.max(world_pos);
             } else {
@@ -133,9 +134,10 @@ fn selection_system(
             .unwrap_or_else(|_| Vec::new())
             .into_iter()
             .filter(|e| {
+                let y = height_map.height_at(e.pos);
                 let Ok(window_pos) = camera
                     .0
-                    .world_to_viewport(camera.1, Vec3::new(e.pos.x, 0.0, e.pos.y))
+                    .world_to_viewport(camera.1, Vec3::new(e.pos.x, y, e.pos.y))
                 else {
                     warn!(
                         "Failed to convert world position {:?} to screen position",

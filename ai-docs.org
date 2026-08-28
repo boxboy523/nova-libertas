@@ -1,0 +1,73 @@
+#+title: nova_libertas
+
+* 개요
+=bevy_test=는 Rust와 Bevy 0.19로 작성된 RTS 실험 프로젝트다. Godot/GDExtension은 현재 코드 경로에 포함되지 않는다.
+
+실행 시 =assets/map.tmx=의 첫 tile layer를 읽어 256×256 =GameMap=을 만들며, 시뮬레이션 cell 크기는 =CELL_SIZE= 20이다. TMX tile ID를 높이와 통행 가능 여부로 변환해 3D terrain mesh, flow field obstacle, spatial grid를 함께 구성한다. fixed update는 60 Hz다.
+
+* 실행 구조
+- =bevy_test/src/main.rs=: TMX 맵과 핵심 resource를 생성하고 Bevy plugin을 조립한다.
+- =bevy_test/src/lib.rs=: 모듈과 prelude를 공개하며, =setup=에서 테스트 유닛 36기를 생성한다.
+- =bevy_test/src/map.rs=: TMX를 =GameMap=으로 변환하고 =TerrainHeightMap= mesh, 높이 보간, mouse raycast를 제공한다.
+- =bevy_test/src/world3d/mod.rs=: 3D camera, terrain, directional light와 camera-facing billboard를 생성한다. 방향키/화면 가장자리로 camera를 이동하고 Q/E로 zoom한다.
+- =bevy_test/src/input.rs=: cursor ray와 terrain height map의 교점을 2D 지상 좌표로 변환해 =MouseState=에 기록한다.
+- =bevy_test/src/ui.rs=: 클릭/드래그 선택, 이동·공격 명령, selection box와 Bevy UI 기반 HP bar를 담당한다.
+
+* 시뮬레이션
+** 유닛과 공간 질의
+- =Position(Vec2)=가 지상 x/z 위치의 권위 상태다. =position_to_transform_system=이 terrain 높이를 더해 렌더링 =Transform=으로 변환한다.
+- =UnitStats=는 충돌 반경, 최대 속도, 가속도를 보유하고 =UnitBattleStats=는 사거리, 피해량, cooldown, 전달 방식, impact 방식을 보유한다.
+- =SpatialGrid=는 TMX의 막힌 cell과 높이 차가 큰 cell edge를 장애물로 사용한다. fixed tick마다 살아 있는 이동 객체를 다시 등록하며 원 충돌 및 원형/사각형 후보 조회를 제공한다.
+- =ThingCatalog=와 =SpriteCatalog=는 각 =ThingType=의 =assets/**/info.toml=을 읽어 gameplay stats와 visual 설정을 구성한다.
+
+** 이동
+1. 우클릭 또는 A 키 입력이 선택 유닛에 =MoveOrderEvent=를 보낸다. A 키 명령은 =AutoAttack=을 활성화한다.
+2. 명령마다 =FlowField= entity 하나를 만들고 각 유닛의 =Moving.field=가 이를 직접 참조한다.
+3. =chunk-flow-field=가 =GameMap= obstacle에서 방향장을 만들고, 목표 근처에서는 목표를 향한 직선 방향을 사용한다.
+4. =dodgy_2d= local avoidance, 벽/경계 보정, 가감속을 거쳐 =Position=을 갱신한다.
+5. 도착하거나 같은 field를 완료한 유닛과 충돌하면 =DelayedStopTrigger=를 거쳐 =Stopped=로 전환한다. 참조하는 유닛이 없는 =FlowField=는 매 fixed tick 제거한다.
+
+Movement plugin의 fixed systems는 하나의 =.chain()=으로 명시적으로 순서가 고정돼 있다. Unit plugin에서는 사망 처리 후 spatial grid를 갱신하며, Combat plugin에서는 추격/공격 판정, 자동 표적 탐색, 공격, projectile 이동 순서가 고정돼 있다. plugin 사이의 fixed-system 순서는 별도로 연결하지 않았다.
+
+** 전투
+- 적 유닛을 좌클릭하면 선택 유닛에 =AttackOrderEvent=를 보내고, 목표를 추적하는 =FieldFollowTarget= flow field와 =Attack=을 부여한다.
+- 직접 공격은 =Moving + Attack= 상태를 사용한다. 목표가 사거리 안이면 =Attack.attacking=true=가 되고 공격 중에는 목표 방향을 바라보며 감속한다.
+- =AutoAttack= 유닛은 현재 =Attack=이 없을 때 사거리 안의 가장 가까운 적을 찾는다. 자동 표적이 사거리 밖으로 나가면 =Attack=을 제거해 다시 탐색한다.
+- 공격 전달 방식은 즉시 또는 projectile이며, impact는 단일 대상 또는 범위 피해다. Cannon은 projectile+area, Gun은 instant+single 설정이다.
+- 피해로 HP가 0 이하가 되면 =Dead=를 붙이고 이동/공격/정지 상태를 제거한다. Unit plugin이 다음 fixed update 처리에서 entity를 despawn한다.
+
+* 렌더링
+- 유닛과 벽은 3D world에 quad mesh로 놓고 =Billboard= system이 camera를 향하게 한다.
+- =SpriteCatalog=는 단일 이미지 또는 stand/move/attack sprite sheet를 읽는다. 8방향을 5개 row와 좌우 flip으로 매핑한다.
+- =TeamColorMaterial=은 =assets/shaders/team_color.wgsl=에서 녹색 계열 key color를 팀 색으로 치환한다.
+- 유닛 animation은 =Moving=/=Stopped=/=Attack.attacking= 변화에 따라 전환된다.
+- HP bar는 별도 Bevy UI entity이며 owner의 3D 위치를 매 update마다 viewport 좌표로 투영한다. owner 제거 시 =HpBarRef= remove observer가 bar도 제거한다.
+- =DebugPlugin=은 유닛 충돌 원, 선택 원, mouse terrain hit 위치를 gizmo로 표시한다.
+
+* 입력
+- 좌클릭: Player 유닛 단일 선택. Enemy 유닛 클릭 시 현재 선택 유닛에 직접 공격 명령.
+- 좌클릭 드래그: 화면 사각형 안의 Player 유닛 선택.
+- 우클릭: 선택 유닛 이동. 기존 =AutoAttack=과 =Attack= 제거.
+- A: mouse 위치로 자동공격 이동 명령.
+- 방향키 또는 화면 가장자리: camera 이동.
+- Q/E: camera zoom in/out.
+
+* 현재 확인된 위험
+- =GameMap::from_tmx=는 첫 layer가 tile layer라고 가정하며, =width - 1=과 =height - 1= 반복 때문에 0 크기 맵에서는 underflow가 난다. tile ID와 높이의 대응도 코드에 고정돼 있다.
+- =FlowGrid::world_to_grid=는 음수 좌표를 =usize=로 변환한 뒤 범위에 clamp하므로 음수 위치를 명시적으로 거부하지 않는다. =gen_flow_field=의 목표 좌표도 범위 검증 없이 변환한다.
+- terrain mesh와 raycast 범위는 =(width - 1) * cell_size=까지지만 =SpatialGrid.map_size=는 =width * cell_size=다. 맵의 마지막 cell 부근에서 렌더/입력 범위와 시뮬레이션 범위가 한 cell만큼 다르다.
+- =ImpactEvent=의 범위 피해 조회는 대상 중심까지의 거리만 검사한다(=by_center=true=). 이는 entity 반경을 포함하는 overlap 판정이 아니라 중심점 기준 범위다.
+- =ThingType::get_info=와 sprite catalog 초기화는 asset 파일 누락 및 TOML 오류에 =expect=/=panic!=을 사용한다.
+- =assets/**/info.toml=의 =unit_stats.max_hp=는 현재 =UnitStats=에 없는 필드이고 spawn HP는 =SpawnUnitEvent.hp=에서 별도로 받는다. Serde가 unknown field를 거부하지 않아 설정의 =max_hp=는 gameplay에 사용되지 않는다.
+- fixed system 순서는 각 plugin 내부에서만 chain되어 있다. Combat, Movement, Unit plugin 사이에는 dependency edge가 없으므로 서로의 결과가 한 fixed tick 뒤 반영될 수 있다.
+
+* 검증
+- 2026-08-28 현재 =bevy_test=에서 =cargo check --locked=가 성공한다.
+- warning 2개가 남아 있다: =world3d/mod.rs=의 미사용 =GameMap= import, =unit/spatial_grid.rs=의 미사용 =circle_line_overlap= 함수.
+- 자동 테스트는 현재 소스 트리에서 확인되지 않았다.
+
+* 미해결 질문
+- 목표 유닛 수와 목표 frame/fixed tick 성능 기준은 미확인이다.
+- 하나의 이동 명령마다 flow field를 유지할지 동일 목적지 또는 분대 단위로 공유할지는 미확인이다.
+- 어택땅의 탐색 반경, 표적 우선순위, 추격 거리, 목적지 도착 후 상태의 최종 규칙은 미확인이다.
+- TMX의 tile ID와 높이/통행 규칙을 asset metadata로 옮길지는 미확인이다.

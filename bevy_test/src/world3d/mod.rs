@@ -1,4 +1,7 @@
-use crate::prelude::*;
+use crate::{
+    map::{GameMap, TerrainHeightMap},
+    prelude::*,
+};
 use bevy::{mesh::VertexAttributeValues, prelude::*};
 
 pub struct World3DPlugin;
@@ -12,12 +15,13 @@ pub struct Billboard {
 impl Plugin for World3DPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_world_3d)
-            .add_systems(Update, (orbit_camera_system, billboard_system));
+            .add_systems(Update, (rts_camera_system, billboard_system));
     }
 }
 
 fn setup_world_3d(
     mut commands: Commands,
+    mut height_map: ResMut<TerrainHeightMap>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -28,24 +32,14 @@ fn setup_world_3d(
             order: 0,
             ..default()
         },
-        OrbitCamera {
+        RtsCamera {
             focus: Vec3::new(500.0, 0.0, 500.0),
-            radius: 900.0,
-            yaw: 0.0,
-            pitch: 45.0_f32.to_radians(),
+            radius: 1500.0,
         },
         Transform::from_xyz(500.0, 700.0, 1100.0).looking_at(center, Vec3::Y),
     ));
 
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(1000.0, 1000.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.5, 0.3),
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
-        Transform::from_xyz(500.0, 0.0, 500.0),
-    ));
+    height_map.spawn_map(&mut commands, &mut materials, &mut meshes);
 
     commands.spawn((
         DirectionalLight {
@@ -124,62 +118,71 @@ pub fn create_atlas_quad(
 }
 
 #[derive(Component)]
-pub struct OrbitCamera {
+pub struct RtsCamera {
     pub focus: Vec3,
     pub radius: f32,
-    pub yaw: f32,
-    pub pitch: f32,
 }
 
-fn orbit_camera_system(
+fn rts_camera_system(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
-    camera: Single<(&mut Transform, &mut OrbitCamera)>,
+    camera: Single<(&mut Transform, &mut RtsCamera)>,
+    window: Single<&Window>,
 ) {
-    let (mut transform, mut orbit) = camera.into_inner();
+    let (mut transform, mut rts_cam) = camera.into_inner();
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
     let delta = time.delta_secs();
 
-    let rotation_speed = 1.2;
+    let cam_speed = 1.2;
     let zoom_speed = 500.0;
 
-    if keys.pressed(KeyCode::ArrowLeft) {
-        orbit.yaw += rotation_speed * delta;
+    let forward = transform.forward().as_vec3();
+    let right = transform.right().as_vec3();
+
+    let ground_forward = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
+    let ground_right = Vec3::new(right.x, 0.0, right.z).normalize_or_zero();
+
+    let mut direction = Vec3::ZERO;
+
+    if keys.pressed(KeyCode::ArrowLeft) || cursor.x <= CAMERA_MOUSE_DEADZONE {
+        direction -= ground_right;
     }
 
-    if keys.pressed(KeyCode::ArrowRight) {
-        orbit.yaw -= rotation_speed * delta;
+    if keys.pressed(KeyCode::ArrowRight) || cursor.x >= window.width() - CAMERA_MOUSE_DEADZONE {
+        direction += ground_right;
     }
 
-    if keys.pressed(KeyCode::ArrowUp) {
-        orbit.pitch += rotation_speed * delta;
+    if keys.pressed(KeyCode::ArrowUp) || cursor.y <= CAMERA_MOUSE_DEADZONE {
+        direction += ground_forward;
     }
 
-    if keys.pressed(KeyCode::ArrowDown) {
-        orbit.pitch -= rotation_speed * delta;
+    if keys.pressed(KeyCode::ArrowDown) || cursor.y >= window.height() - CAMERA_MOUSE_DEADZONE {
+        direction -= ground_forward;
     }
 
     if keys.pressed(KeyCode::KeyQ) {
-        orbit.radius -= zoom_speed * delta;
+        rts_cam.radius -= zoom_speed * delta;
     }
 
     if keys.pressed(KeyCode::KeyE) {
-        orbit.radius += zoom_speed * delta;
+        rts_cam.radius += zoom_speed * delta;
     }
 
-    orbit.pitch = orbit
-        .pitch
-        .clamp(10.0_f32.to_radians(), 80.0_f32.to_radians());
+    rts_cam.radius = rts_cam.radius.clamp(200.0, 2000.0);
 
-    orbit.radius = orbit.radius.clamp(200.0, 2000.0);
+    let radius = rts_cam.radius;
+    rts_cam.focus += direction * cam_speed * delta * radius;
 
-    let horizontal = orbit.pitch.cos();
+    let horizontal = CAMERA_PITCH.cos();
 
     let offset = Vec3::new(
-        orbit.yaw.sin() * horizontal,
-        orbit.pitch.sin(),
-        orbit.yaw.cos() * horizontal,
-    ) * orbit.radius;
+        CAMERA_YAW.sin() * horizontal,
+        CAMERA_PITCH.sin(),
+        CAMERA_YAW.cos() * horizontal,
+    ) * rts_cam.radius;
 
-    transform.translation = orbit.focus + offset;
-    transform.look_at(orbit.focus, Vec3::Y);
+    transform.translation = rts_cam.focus + offset;
+    transform.look_at(rts_cam.focus, Vec3::Y);
 }

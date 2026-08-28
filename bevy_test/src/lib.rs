@@ -2,6 +2,7 @@ pub mod combat;
 pub mod constants;
 pub mod debug;
 pub mod input;
+pub mod map;
 pub mod movement;
 pub mod thing;
 pub mod ui;
@@ -67,7 +68,7 @@ pub fn setup(mut commands: Commands) {
     for i in 1..7 {
         for j in 1..7 {
             commands.trigger(SpawnUnitEvent {
-                position: Vec2::new(i as f32 * 40.0 + 40.0, j as f32 * 40.0 + 40.0),
+                position: Vec2::new(i as f32 * 40.0 + 200.0, j as f32 * 40.0 + 200.0),
                 t_type: if i % 2 == 0 {
                     ThingType::AttackerGun
                 } else {

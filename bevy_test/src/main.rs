@@ -1,12 +1,15 @@
 use bevy::prelude::*;
-use bevy_test::prelude::*;
+use bevy_test::{
+    map::{GameMap, TerrainHeightMap},
+    prelude::*,
+};
 
 fn main() {
-    let (map_width, map_height, wall_data) = bevy_test::load_map_from_csv("assets/map.csv");
-    let map_width_f = map_width as f32 * CELL_SIZE;
-    let map_height_f = map_height as f32 * CELL_SIZE;
-    let flow_grid = FlowGrid::new(map_width_f, map_height_f, CELL_SIZE, &wall_data);
-    let spatial_grid = SpatialGrid::new(map_width_f, map_height_f, CELL_SIZE, &wall_data);
+    //let (map_width, map_height, wall_data) = bevy_test::load_map_from_csv("assets/map.csv");
+    let game_map = GameMap::from_tmx("assets/map.tmx", CELL_SIZE).expect("Failed to load map");
+    let height_map = TerrainHeightMap::from_game_map(&game_map);
+    let flow_grid = FlowGrid::new(&game_map);
+    let spatial_grid = SpatialGrid::new(&game_map);
     let thing_catalog = ThingCatalog::new();
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
@@ -15,6 +18,7 @@ fn main() {
         .insert_resource(flow_grid)
         .insert_resource(spatial_grid)
         .insert_resource(thing_catalog)
+        .insert_resource(height_map)
         .add_plugins(SpritePlugin)
         .add_plugins(MaterialPlugin::<TeamColorMaterial>::default())
         .add_plugins(UIPlugin)

@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{map::TerrainHeightMap, prelude::*};
 use bevy::prelude::*;
 
 pub struct DebugPlugin;
@@ -14,9 +14,11 @@ fn debug_draw(
     query_units: Query<(Entity, &Position, &UnitStats)>,
     query_selected: Query<&Selected>,
     mouse_state: Res<MouseState>,
+    height_map: Res<TerrainHeightMap>,
 ) {
     query_units.iter().for_each(|(entity, position, stats)| {
-        let pos = Vec3::new(position.x, 0.0, position.y);
+        let height = height_map.height_at(**position);
+        let pos = Vec3::new(position.x, height + 0.1, position.y);
         let radius = stats.size;
         let iso = Isometry3d {
             translation: pos.into(),
@@ -29,7 +31,7 @@ fn debug_draw(
     });
     let mouse_pos = Vec3::new(
         mouse_state.world_position.x,
-        0.1,
+        height_map.height_at(mouse_state.world_position) + 0.1,
         mouse_state.world_position.y,
     );
     gizmos.sphere(

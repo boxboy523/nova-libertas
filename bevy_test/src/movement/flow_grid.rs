@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{map::GameMap, prelude::*};
 use bevy::prelude::*;
 use chunk_flow_field::map::Map;
 
@@ -12,14 +12,12 @@ pub struct FlowGrid {
 }
 
 impl FlowGrid {
-    pub fn new(map_width: f32, map_height: f32, cell_size: f32, wall: &[bool]) -> Self {
-        let width = (map_width / cell_size).ceil() as usize;
-        let height = (map_height / cell_size).ceil() as usize;
+    pub fn new(map: &GameMap) -> Self {
         Self {
-            width,
-            height,
-            cell_size,
-            map: Map::new(width, height, wall),
+            width: map.width,
+            height: map.height,
+            cell_size: map.cell_size,
+            map: Map::new(&map.build_obstacle()),
         }
     }
 
