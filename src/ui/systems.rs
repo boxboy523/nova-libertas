@@ -1,38 +1,16 @@
 use std::collections::HashSet;
 
-use crate::{map::TerrainHeightMap, prelude::*};
 use bevy::prelude::*;
+use bevy_hui::prelude::HtmlNode;
 
-pub struct UIPlugin;
+use crate::{
+    input::MouseState,
+    map::TerrainHeightMap,
+    prelude::*,
+    ui::components::{DragSelection, HpBarFill, HpBarRef, HpBarRoot},
+};
 
-impl Plugin for UIPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_selection_box)
-            .add_systems(
-                Update,
-                (
-                    selection_system,
-                    update_selection_box,
-                    move_selected_units,
-                    spawn_hp_bar,
-                    update_hp_bar_position_system,
-                    update_hp_bar_fill_system,
-                )
-                    .chain()
-                    .after(mouse_input),
-            )
-            .add_observer(remove_hp_bar);
-    }
-}
-
-#[derive(Component, Default)]
-pub struct DragSelection {
-    start: Vec2,
-    current: Vec2,
-    active: bool,
-}
-
-fn spawn_selection_box(mut commands: Commands) {
+pub fn spawn_selection_box(mut commands: Commands) {
     commands.spawn((
         DragSelection::default(),
         Node {
@@ -48,7 +26,14 @@ fn spawn_selection_box(mut commands: Commands) {
     println!("Spawned selection box");
 }
 
-fn update_selection_box(selection_box: Single<(&mut Node, &DragSelection)>) {
+pub fn spawn_test_panel(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        HtmlNode(asset_server.load("ui/src/test_panel.html")),
+        GlobalZIndex(100),
+    ));
+}
+
+pub fn update_selection_box(selection_box: Single<(&mut Node, &DragSelection)>) {
     let (mut node, drag_selection) = selection_box.into_inner();
     if drag_selection.active {
         node.display = Display::Flex;
@@ -63,7 +48,7 @@ fn update_selection_box(selection_box: Single<(&mut Node, &DragSelection)>) {
     }
 }
 
-fn selection_system(
+pub fn selection_system(
     mut command: Commands,
     mut drag_selection: Single<&mut DragSelection>,
     state: Res<MouseState>,
@@ -167,7 +152,7 @@ fn selection_system(
     }
 }
 
-fn move_selected_units(
+pub fn move_selected_units(
     mut commands: Commands,
     state: Res<MouseState>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -186,22 +171,7 @@ fn move_selected_units(
     }
 }
 
-#[derive(Component)]
-pub struct HpBarRoot {
-    pub owner: Entity,
-    pub visual_height: f32,
-}
-
-#[derive(Component)]
-pub struct HpBarFill;
-
-#[derive(Component)]
-pub struct HpBarRef {
-    pub root: Entity,
-    pub fill: Entity,
-}
-
-fn spawn_hp_bar(
+pub fn spawn_hp_bar(
     mut command: Commands,
     units: Query<(Entity, &ThingType), Added<UnitHp>>,
     catalog: Res<SpriteCatalog>,
@@ -294,7 +264,7 @@ pub fn update_hp_bar_position_system(
     });
 }
 
-fn update_hp_bar_fill_system(
+pub fn update_hp_bar_fill_system(
     units: Query<(&UnitHp, &HpBarRef), Changed<UnitHp>>,
     mut fills: Query<&mut Node, With<HpBarFill>>,
 ) {
@@ -310,15 +280,4 @@ fn update_hp_bar_fill_system(
 
         fill_node.width = percent(ratio * 100.0);
     });
-}
-
-fn remove_hp_bar(trigger: On<Remove, HpBarRef>, query: Query<&HpBarRef>, mut commands: Commands) {
-    if let Ok(hp_bar) = query.get(trigger.entity) {
-        commands.entity(hp_bar.root).despawn();
-    } else {
-        warn!(
-            "Failed to find HpBarRef for entity {:?} when trying to remove hp bar",
-            trigger.entity
-        );
-    }
 }

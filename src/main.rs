@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_hui::HuiPlugin;
 use bevy_test::{
     map::{GameMap, TerrainHeightMap},
     prelude::*,
@@ -13,6 +14,7 @@ fn main() {
     let thing_catalog = ThingCatalog::new();
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(HuiPlugin)
         .init_resource::<MouseState>()
         .insert_resource(Time::<Fixed>::from_hz(60.0))
         .insert_resource(flow_grid)

@@ -13,6 +13,6 @@ pub const ATTACK_RESP: f32 = 1.0;
 pub const CELL_SIZE: f32 = 20.0; // 플로우 필드 및 공간 분할 그리드의 셀 크기
 pub const SWITCH_FACE_ANGLE: f32 = 27.5_f32.to_radians(); // 유닛이 회전할 때 방향 전환을 허용하는 각도
 pub const TERRAIN_HEIGHT_STEP: f32 = 20.0; // 지형 높이 차이 단계
-pub const CAMERA_PITCH: f32 = 70.0_f32.to_radians(); // 카메라 피치 각도
+pub const CAMERA_PITCH: f32 = 51.26_f32.to_radians(); // 카메라 피치 각도
 pub const CAMERA_YAW: f32 = 0.0;
 pub const CAMERA_MOUSE_DEADZONE: f32 = 10.0; // 마우스 이동 감지 데드존

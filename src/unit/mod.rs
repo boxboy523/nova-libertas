@@ -5,6 +5,8 @@ pub mod system;
 
 use bevy::prelude::*;
 
+//use crate::visual::system::sprite_catalog_startup_system;
+
 pub struct UnitPlugin;
 
 impl Plugin for UnitPlugin {
@@ -19,7 +21,10 @@ impl Plugin for UnitPlugin {
                 )
                     .chain(),
             )
-            .add_systems(Startup, system::startup_spawn_wall)
+            // .add_systems(
+            //     Startup,
+            //     system::startup_spawn_wall.after(sprite_catalog_startup_system),
+            // )
             .add_systems(Update, system::position_to_transform_system);
     }
 }
