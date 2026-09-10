@@ -2,13 +2,19 @@ use std::collections::HashSet;
 
 use bevy::prelude::*;
 use bevy_hui::prelude::HtmlNode;
+use bevy_hui::prelude::UiId;
 
+use crate::ui::components::UiTween;
+use crate::ui::components::UiTweenState;
+use crate::ui::events::TweenFinishedEvent;
 use crate::{
     input::MouseState,
     map::TerrainHeightMap,
     prelude::*,
     ui::components::{DragSelection, HpBarFill, HpBarRef, HpBarRoot},
+    ui::UiEntityIndex
 };
+
 
 pub fn spawn_selection_box(mut commands: Commands) {
     commands.spawn((
@@ -279,5 +285,31 @@ pub fn update_hp_bar_fill_system(
         let ratio = (unit_hp.current / unit_hp.max).clamp(0.0, 1.0);
 
         fill_node.width = percent(ratio * 100.0);
+    });
+}
+
+pub fn animate_ui_tween(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut UiTween, &mut UiTransform)>,
+) {
+    query.iter_mut().for_each(|(entity, mut tween, mut transform)| {
+        match tween.state {
+            UiTweenState::Moving => {
+                tween.timer.tick(time.delta());
+                let progress = tween.timer.fraction();
+                transform.translation.x = tween.target_left.lerp(progress);
+                transform.translation.y = tween.target_up.lerp(progress);
+                if tween.timer.is_finished() {
+                    tween.state = UiTweenState::Finished;
+                }
+            },
+            UiTweenState::Finished => {
+                transform.translation.x = tween.target_left.unit * tween.target_left.to;
+                transform.translation.y = tween.target_up.unit * tween.target_up.to;
+                commands.trigger(TweenFinishedEvent(entity));
+                commands.entity(entity).remove::<UiTween>();
+            },
+        }
     });
 }

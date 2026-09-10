@@ -5,6 +5,7 @@
 - Default to read-only analysis and discussion.
 - Do not modify project files unless the user explicitly asks for a modification.
 - A statement of intent, an observation that something should change, or agreement with a proposed direction is not authorization to edit.
+- Treat conversational proposals such as “할까”, “해보자”, and “넣어보자” as discussion, not authorization to edit. Edit only when the user gives an explicit implementation command such as “수정해”, “구현해”, or “반영해”.
 - Before editing, explain the relevant current behavior, the proposed change, and its expected interaction with the existing system. Wait for an explicit request to implement it.
 - When the user explicitly requests an edit, that request authorizes only the stated scope. Discuss materially broader changes before making them.
 

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::map::TerrainHeightMap;
+use crate::{map::TerrainHeightMap, ui::{UiEntityIndex, events::ToggleSidePanelEvent}};
 
 #[derive(Resource, Debug)]
 pub struct MouseState {
@@ -49,7 +49,7 @@ pub fn mouse_input(
     };
 
     let Some(hit) = height_map.raycast(&ray) else {
-        warn!("Mouse ray did not hit the terrain height map");
+        //warn!("Mouse ray did not hit the terrain height map");
         return;
     };
     state.world_position = Vec2::new(hit.x, hit.z);
@@ -81,6 +81,33 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, mouse_input);
+        app.add_systems(Update, (mouse_input, toggle_side_panel_input).chain());
     }
+}
+
+pub fn toggle_side_panel_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    ui_index: Res<UiEntityIndex>,
+    nodes: Query<(&Node, &UiTransform)>,
+    mut commands: Commands,
+) {
+    if !keys.just_pressed(KeyCode::ShiftLeft) {
+        return;
+    }
+    println!("Shift key pressed, toggling side panel");
+    let Some(entity) = ui_index.entities.get("side_panel") else {
+        warn!("Side panel entity not found in UiEntityIndex");
+        return;
+    };
+
+    let Ok((node, transform)) = nodes.get(*entity) else {
+        warn!("Side panel entity does not have a Node component");
+        return;
+    };
+    println!("Side panel node left: {:?}, Transform: {:?}", node.left, transform);
+    let Ok(offset) = transform.translation.x.try_add(node.left) else {
+        warn!("Failed to calculate new offset for side panel");
+        return;
+    };
+    commands.trigger(ToggleSidePanelEvent(offset));
 }

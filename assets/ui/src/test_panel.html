@@ -3,8 +3,172 @@
         width="100%"
         height="100%"
         position="relative"
-    >
+      >
+      <node
+        position="absolute"
+        left="1.5vw"
+        top="1.5vh"
+        height="5vh"
+        display="flex"
+        flex_direction="row"
+        align_items="center"
+        column_gap="1.5vw"
+        >
         <node
+          display="flex"
+          flex_direction="row"
+          align_items="center"
+          column_gap="0.5vw"
+          >
+          <image
+            src="ui/resourcesIcon/iconMineral.png"
+            height="4vh"
+            aspect_ratio="1"
+            image_mode="stretch"
+            />
+          <text
+            id="mineral_count"
+            font="fonts/rajdhani-bold.ttf"
+            font_size="20"
+            font_color="#AAAAAA"
+            text_layout="center no_wrap"
+            >
+            100
+          </text>
+        </node>
+        <node
+          display="flex"
+          flex_direction="row"
+          align_items="center"
+          column_gap="0.5vw"
+          >
+          <image
+            src="ui/resourcesIcon/iconOil.png"
+            height="4vh"
+            aspect_ratio="1"
+            image_mode="stretch"
+            />
+          <text
+            id="gas_count"
+            font="fonts/rajdhani-bold.ttf"
+            font_size="20"
+            font_color="#AAAAAA"
+            text_layout="center no_wrap"
+            >
+            100
+          </text>
+        </node>
+        <node
+          display="flex"
+          flex_direction="row"
+          align_items="center"
+          column_gap="0.5vw"
+          >
+          <image
+            src="ui/resourcesIcon/iconPop.png"
+            height="4vh"
+            aspect_ratio="1"
+            image_mode="stretch"
+            />
+          <text
+            id="power_count"
+            font="fonts/rajdhani-bold.ttf"
+            font_size="20"
+            font_color="#AAAAAA"
+            text_layout="center no_wrap"
+            >
+            100
+          </text>
+        </node>
+      </node>
+      <node
+        position="absolute"
+        right="1.5vw"
+        top="1.5vh"
+        height="7vh"
+        display="flex"
+        flex_direction="row"
+        align_items="center"
+        column_gap="1.5vw"
+        >
+        <image
+          id="options_button"
+          src="ui/nineSlices/UIbutton1.png"
+          image_mode="270px stretch stretch 0.2"
+          height="100%"
+          aspect_ratio="1.3"
+          flex_shrink="0"
+          justify_content="center"
+          align_items="center"
+        >
+          <text
+            font="fonts/rajdhani-bold.ttf"
+            font_size="20"
+            font_color="#222222"
+            text_layout="center no_wrap"
+            >
+            Options
+          </text>
+        </image>
+        >
+      </node>
+      <node
+        position="absolute"
+        right=".5vw"
+        bottom="25%"
+        height="7vh"
+        display="flex"
+        flex_direction="row"
+        align_items="center"
+        column_gap=".5vw"
+      >
+        <image
+          id="quickslot_1"
+          src="ui/nineSlices/UIbutton1.png"
+          image_mode="270px stretch stretch 0.2"
+          height="100%"
+          aspect_ratio="1"
+          flex_shrink="0"
+          justify_content="center"
+          align_items="center"
+        />
+        <image
+          id="quickslot_2"
+          src="ui/nineSlices/UIbutton1.png"
+          image_mode="270px stretch stretch 0.2"
+          height="100%"
+          aspect_ratio="1"
+          flex_shrink="0"
+          justify_content="center"
+          align_items="center"
+        />
+        <image
+          id="quickslot_3"
+          src="ui/nineSlices/UIbutton1.png"
+          image_mode="270px stretch stretch 0.2"
+          height="100%"
+          aspect_ratio="1"
+          flex_shrink="0"
+          justify_content="center"
+          align_items="center"
+        />
+      </node>
+      <node
+        id="side_panel"
+        position="absolute"
+        left=".1vw"
+        top="10%"
+        width="25vw"
+        height="50vh"
+      >
+        <image
+          id="side_panel_bg"
+          src="ui/nineSlices/UIscroll2.png"
+          image_mode="120px stretch stretch 0.6"
+          width="100%"
+          height="100%"/>
+      </node>
+      <node
             position="absolute"
             left="0px"
             right="0px"
