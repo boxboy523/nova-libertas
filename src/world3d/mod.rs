@@ -1,4 +1,5 @@
 use crate::{
+    input::{UiInputCapture, scroll_panel_input},
     map::{GameMap, TerrainHeightMap},
     prelude::*,
 };
@@ -15,7 +16,13 @@ pub struct Billboard {
 impl Plugin for World3DPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_world_3d)
-            .add_systems(Update, (rts_camera_system, billboard_system));
+            .add_systems(
+                Update,
+                (
+                    rts_camera_system.after(scroll_panel_input),
+                    billboard_system,
+                ),
+            );
     }
 }
 
@@ -126,6 +133,8 @@ pub struct RtsCamera {
 fn rts_camera_system(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    mut mouse_wheel: MessageReader<bevy::input::mouse::MouseWheel>,
+    ui_input_capture: Res<UiInputCapture>,
     camera: Single<(&mut Transform, &mut RtsCamera)>,
     window: Single<&Window>,
 ) {
@@ -162,12 +171,10 @@ fn rts_camera_system(
         direction -= ground_forward;
     }
 
-    if keys.pressed(KeyCode::KeyQ) {
-        rts_cam.radius -= zoom_speed * delta;
-    }
-
-    if keys.pressed(KeyCode::KeyE) {
-        rts_cam.radius += zoom_speed * delta;
+    for event in mouse_wheel.read() {
+        if !ui_input_capture.mouse_wheel {
+            rts_cam.radius -= event.y * zoom_speed * delta;
+        }
     }
 
     rts_cam.radius = rts_cam.radius.clamp(200.0, 2000.0);

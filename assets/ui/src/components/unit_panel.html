@@ -1,0 +1,94 @@
+<template>
+  <!-- unit panel -->
+  <node
+    id="unit_panel"
+    position="absolute"
+    left="24.5vh"
+    right="24.5vh"
+    bottom="0%"
+    height="30%"
+  >
+    <image
+      id="unit_panel_bg"
+      src="ui/nineSlices/UIscroll1blue.png"
+      image_mode="400px 200px stretch stretch .2"
+      width="100%"
+      height="100%"
+      min_height="0px"
+      overflow="clip clip"
+      padding="2vh 1vw 1.5vh 1vw"
+      display="flex"
+      flex_direction="column"
+      row_gap="0.5vh"
+    >
+      <!-- unit tier legend -->
+      <node
+        width="100%"
+        height="5vh"
+        flex_shrink="0"
+        display="grid"
+        grid_template_columns="(4, 1fr)"
+        column_gap="0.6vw"
+      >
+        <image src="ui/nineSlices/UIrectangleBlue.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 1</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#7777CC" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+        <image src="ui/nineSlices/UIrectangleBlue.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 2</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#7777CC" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+        <image src="ui/nineSlices/UIrectangleBlue.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 3</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#7777CC" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+        <image src="ui/nineSlices/UIrectangleBlue.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 4</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#7777CC" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+      </node>
+
+      <!-- scrollable unit icon list -->
+      <node
+        id="unit_icon_viewport"
+        width="100%"
+        flex_grow="1"
+        flex_basis="0px"
+        min_height="0px"
+        overflow="clip scroll"
+      >
+        <node
+          id="unit_icon_grid"
+          width="100%"
+          height="29.8vh"
+          flex_shrink="0"
+          display="grid"
+          grid_template_columns="(4, 1fr)"
+          grid_auto_rows="7vh"
+          column_gap="0.6vw"
+          row_gap="0.6vh"
+        >
+          <node display="flex" justify_content="center" align_items="center"><image id="train_attacker" src="ui/icons/units/iconAttackerGun.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_jetstriker" src="ui/icons/units/iconJetstriker.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_gigas" src="ui/icons/units/iconGigas.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_astrape" src="ui/icons/units/iconAstrape.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+
+          <node display="flex" justify_content="center" align_items="center"><image id="train_galar" src="ui/icons/units/iconGalar.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_artemis" src="ui/icons/units/iconArtemis.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_hovertank" src="ui/icons/units/iconHovertank.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_phaethon" src="ui/icons/units/iconPhaethon.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+
+          <node display="flex" justify_content="center" align_items="center"><image id="train_roadtes" src="ui/icons/units/iconRoadtes.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_hakan" src="ui/icons/units/iconHakan.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_bareoth" src="ui/icons/units/iconBareoth.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_falcon" src="ui/icons/units/iconFalcon.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+
+          <node display="flex" justify_content="center" align_items="center"><image id="train_rustica" src="ui/icons/units/iconRustica.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_makat" src="ui/icons/units/iconMakat.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_violet" src="ui/icons/units/iconViolet.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="train_zephyrus" src="ui/icons/units/iconZephyrus.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+        </node>
+      </node>
+    </image>
+  </node>
+</template>

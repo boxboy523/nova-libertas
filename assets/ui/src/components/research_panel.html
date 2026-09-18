@@ -1,0 +1,94 @@
+<template>
+  <!-- research panel -->
+  <node
+    id="research_panel"
+    position="absolute"
+    left="24.5vh"
+    right="24.5vh"
+    bottom="0%"
+    height="30%"
+  >
+    <image
+      id="research_panel_bg"
+      src="ui/nineSlices/UIscroll1green.png"
+      image_mode="400px 200px stretch stretch 0.2"
+      width="100%"
+      height="100%"
+      min_height="0px"
+      overflow="clip clip"
+      padding="2vh 1vw 1.5vh 1vw"
+      display="flex"
+      flex_direction="column"
+      row_gap="0.5vh"
+    >
+      <!-- research tier legend -->
+      <node
+        width="100%"
+        height="5vh"
+        flex_shrink="0"
+        display="grid"
+        grid_template_columns="(4, 1fr)"
+        column_gap="0.6vw"
+      >
+        <image src="ui/nineSlices/UIrectangleGreen.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 1</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#55AA88" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+        <image src="ui/nineSlices/UIrectangleGreen.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 2</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#55AA88" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+        <image src="ui/nineSlices/UIrectangleGreen.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 3</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#55AA88" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+        <image src="ui/nineSlices/UIrectangleGreen.png" image_mode="270px stretch stretch 0.2" display="flex" flex_direction="column" justify_content="center" align_items="center">
+          <text font="fonts/rajdhani-bold.ttf" font_size="20" font_color="#AAAAAA" text_layout="center no_wrap">Tier 4</text>
+          <text font="fonts/rajdhani-bold.ttf" font_size="14" font_color="#55AA88" text_layout="center no_wrap">Active 1 / 4</text>
+        </image>
+      </node>
+
+      <!-- scrollable research icon list -->
+      <node
+        id="research_icon_viewport"
+        width="100%"
+        flex_grow="1"
+        flex_basis="0px"
+        min_height="0px"
+        overflow="clip scroll"
+      >
+        <node
+          id="research_icon_grid"
+          width="100%"
+          height="29.8vh"
+          flex_shrink="0"
+          display="grid"
+          grid_template_columns="(4, 1fr)"
+          grid_auto_rows="7vh"
+          column_gap="0.6vw"
+          row_gap="0.6vh"
+        >
+          <node display="flex" justify_content="center" align_items="center"><image id="research_galar" src="ui/icons/research/갈랄 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_makat" src="ui/icons/research/마카트 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_siren" src="ui/icons/research/사이렌 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_attacker" src="ui/icons/research/어태커 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+
+          <node display="flex" justify_content="center" align_items="center"><image id="research_gigas" src="ui/icons/research/기가스 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_mearbolet" src="ui/icons/research/메아르볼레트 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_artemis" src="ui/icons/research/아르테미스 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_jetstriker" src="ui/icons/research/제트 스트라이커 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+
+          <node display="flex" justify_content="center" align_items="center"><image id="research_roadtes" src="ui/icons/research/로드테스 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_bareoth" src="ui/icons/research/바레오트 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_astrape" src="ui/icons/research/아스트라페 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_zephyrus" src="ui/icons/research/제피로스 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+
+          <node display="flex" justify_content="center" align_items="center"><image id="research_rustica" src="ui/icons/research/루스티카 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_violet" src="ui/icons/research/바이올렛 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_albatross" src="ui/icons/research/알바트로스 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+          <node display="flex" justify_content="center" align_items="center"><image id="research_kateida" src="ui/icons/research/카테이다 1.png" height="90%" aspect_ratio="1" image_mode="stretch"/></node>
+        </node>
+      </node>
+    </image>
+  </node>
+</template>

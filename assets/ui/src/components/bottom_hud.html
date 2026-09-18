@@ -1,0 +1,29 @@
+<template>
+  <!-- bottom HUD -->
+  <node
+    position="absolute"
+    left="0px"
+    right="0px"
+    bottom="0px"
+    height="25%"
+    padding=".3vh"
+    column_gap=".3vh"
+    display="flex"
+    flex_direction="row"
+    align_items="flex_end"
+  >
+    <!-- minimap panel -->
+    <image
+      id="minimap_panel"
+      src="ui/nineSlices/UI3.png"
+      image_mode="270px stretch stretch 0.2"
+      height="100%"
+      aspect_ratio="1"
+      flex_shrink="0"
+    />
+    <!-- unit selection panel -->
+    <unit_selection/>
+    <!-- category tabs -->
+    <category_tabs/>
+  </node>
+</template>

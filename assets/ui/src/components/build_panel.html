@@ -1,0 +1,154 @@
+<template>
+  <!-- build panel -->
+  <node
+    id="build_panel"
+    position="absolute"
+    left="24.5vh"
+    right="24.5vh"
+    bottom="0%"
+    height="30%"
+  >
+    <image
+      id="build_panel_bg"
+      src="ui/nineSlices/UIscroll1red.png"
+      image_mode="400px 200px stretch stretch .2"
+      width="100%"
+      height="100%"
+      min_height="0px"
+      overflow="clip clip"
+      padding="2vh 1vw 1.5vh 1vw"
+      display="flex"
+      flex_direction="column"
+      row_gap="0.5vh"
+    >
+      <!-- building category legend -->
+      <node
+        width="100%"
+        height="3.5vh"
+        flex_shrink="0"
+        display="grid"
+        grid_template_columns="(4, 1fr)"
+        column_gap="0.6vw"
+      >
+        <image
+          src="ui/nineSlices/UIrectangleRed.png"
+          image_mode="270px stretch stretch 0.2"
+          display="flex"
+          justify_content="center"
+          align_items="center"
+        >
+          <text font="fonts/rajdhani-bold.ttf" font_size="22" font_color="#AAAAAA" text_layout="center no_wrap">
+            Core / Resource
+          </text>
+        </image>
+        <image
+          src="ui/nineSlices/UIrectangleRed.png"
+          image_mode="270px stretch stretch 0.2"
+          display="flex"
+          justify_content="center"
+          align_items="center"
+        >
+          <text font="fonts/rajdhani-bold.ttf" font_size="22" font_color="#AAAAAA" text_layout="center no_wrap">
+            Production
+          </text>
+        </image>
+        <image
+          src="ui/nineSlices/UIrectangleRed.png"
+          image_mode="270px stretch stretch 0.2"
+          display="flex"
+          justify_content="center"
+          align_items="center"
+        >
+          <text font="fonts/rajdhani-bold.ttf" font_size="22" font_color="#AAAAAA" text_layout="center no_wrap">
+            Research
+          </text>
+        </image>
+        <image
+          src="ui/nineSlices/UIrectangleRed.png"
+          image_mode="270px stretch stretch 0.2"
+          display="flex"
+          justify_content="center"
+          align_items="center"
+        >
+          <text font="fonts/rajdhani-bold.ttf" font_size="22" font_color="#AAAAAA" text_layout="center no_wrap">
+            Defense
+          </text>
+        </image>
+      </node>
+
+      <!-- scrollable building icon list -->
+      <node
+        id="build_icon_viewport"
+        width="100%"
+        flex_grow="1"
+        flex_basis="0px"
+        min_height="0px"
+        overflow="clip scroll"
+      >
+        <node
+          id="build_icon_grid"
+          width="100%"
+          height="29.8vh"
+          flex_shrink="0"
+          display="grid"
+          grid_template_columns="(4, 1fr)"
+          grid_auto_rows="7vh"
+          column_gap="0.6vw"
+          row_gap="0.6vh"
+        >
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_main" src="ui/icons/buildings/iconMainCastle.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_tier_1" src="ui/icons/buildings/icon1Factory.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_lab" src="ui/icons/buildings/icon5Lab.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_gatling" src="ui/icons/buildings/iconDefGatling.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_supply" src="ui/icons/buildings/icon0Supply.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_tier_2" src="ui/icons/buildings/icon2Airfield.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_trial" src="ui/icons/buildings/icon5Trial.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_flak" src="ui/icons/buildings/iconDefFlak.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_oil_well" src="ui/icons/buildings/icon0Well.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_tier_3" src="ui/icons/buildings/icon3Facility.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_complex" src="ui/icons/buildings/icon5Complex.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_guardian" src="ui/icons/buildings/iconDefGuardian.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_transmission" src="ui/icons/buildings/icon0Trans.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_tier_4" src="ui/icons/buildings/icon4Polis.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_hub" src="ui/icons/buildings/icon5Hub.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+          <node display="flex" justify_content="center" align_items="center">
+            <image id="build_bastion" src="ui/icons/buildings/iconDefBastion.png" height="90%" aspect_ratio="1" image_mode="stretch"/>
+          </node>
+        </node>
+      </node>
+    </image>
+  </node>
+</template>

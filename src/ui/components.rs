@@ -79,13 +79,9 @@ impl TweenBehavior {
         TweenBehavior { from, to, unit }
     }
 
-    pub fn from_diff(start: Val, diff: f32) -> Self {
-        if start == Val::ZERO {
-            return TweenBehavior {
-                from: 0.0,
-                to: diff,
-                unit: Val::Px(1.0), // Unknown ZERO is fallback to PX.
-            };
+    pub fn from_diff(start: Val, diff: f32, unit_opt: Option<Val>) -> Self {
+        if start == Val::ZERO && unit_opt.is_none() {
+            panic!("Cannot tween from Val::ZERO with a diff, use from_vals instead");
         }
         let from = match start {
             Val::Px(px) => px,
@@ -97,14 +93,16 @@ impl TweenBehavior {
             _ => panic!("Unsupported Val type for tweening"),
         };
         let to = from + diff;
-        let unit = match start {
-            Val::Px(_) => Val::Px(1.0),
-            Val::Percent(_) => Val::Percent(1.0),
-            Val::Vw(_) => Val::Vw(1.0),
-            Val::Vh(_) => Val::Vh(1.0),
-            Val::VMin(_) => Val::VMin(1.0),
-            Val::VMax(_) => Val::VMax(1.0),
-            _ => panic!("Unsupported Val type for tweening"),
+        let unit = if let Some(u) = unit_opt {u} else {
+            match start {
+                Val::Px(_) => Val::Px(1.0),
+                Val::Percent(_) => Val::Percent(1.0),
+                Val::Vw(_) => Val::Vw(1.0),
+                Val::Vh(_) => Val::Vh(1.0),
+                Val::VMin(_) => Val::VMin(1.0),
+                Val::VMax(_) => Val::VMax(1.0),
+                _ => panic!("Unsupported Val type for tweening"),
+            }
         };
         TweenBehavior { from, to, unit }
     }

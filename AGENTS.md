@@ -22,3 +22,7 @@
 - Keep this file focused on collaboration rules, ownership, workflow constraints, and validation expectations.
 - Store durable architecture, behavior, data-flow, debugging, and design knowledge in `ai-docs.org` rather than expanding this file into a project knowledge dump.
 - Keep documentation changes subject to the same explicit-edit requirement as source changes.
+
+## UI markup convention
+
+- When adding a distinct panel or major UI node to an HTML UI template, place a short comment immediately above it that names its role, such as `<!-- detail panel -->`.

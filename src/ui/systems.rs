@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use bevy::prelude::*;
-use bevy_hui::prelude::HtmlNode;
+use bevy_hui::prelude::{HtmlComponents, HtmlNode};
 use bevy_hui::prelude::UiId;
 
 use crate::ui::components::UiTween;
@@ -32,9 +32,33 @@ pub fn spawn_selection_box(mut commands: Commands) {
     println!("Spawned selection box");
 }
 
-pub fn spawn_test_panel(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub fn register_ui_components(
+    mut html_components: HtmlComponents,
+    asset_server: Res<AssetServer>,
+) {
+    for component in [
+        "resource_bar",
+        "options_button",
+        "quickslot_bar",
+        "side_panel",
+        "build_panel",
+        "unit_panel",
+        "research_panel",
+        "unit_selection",
+        "category_tabs",
+        "bottom_hud",
+        "detail_panel",
+    ] {
+        html_components.register(
+            component,
+            asset_server.load(format!("ui/src/components/{component}.html")),
+        );
+    }
+}
+
+pub fn spawn_main_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
-        HtmlNode(asset_server.load("ui/src/test_panel.html")),
+        HtmlNode(asset_server.load("ui/src/main.html")),
         GlobalZIndex(100),
     ));
 }

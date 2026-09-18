@@ -1,6 +1,15 @@
-use bevy::prelude::*;
+use bevy::{
+    input::mouse::{MouseScrollUnit, MouseWheel},
+    prelude::*,
+};
 
-use crate::{map::TerrainHeightMap, ui::{UiEntityIndex, events::ToggleSidePanelEvent}};
+use crate::{
+    map::TerrainHeightMap,
+    ui::{
+        BottomPanel, UiEntityIndex,
+        events::{ToggleBottomPanelEvent, ToggleSidePanelEvent},
+    },
+};
 
 #[derive(Resource, Debug)]
 pub struct MouseState {
@@ -13,6 +22,11 @@ pub struct MouseState {
     pub right_just_pressed: bool,
     pub right_pressed: bool,
     pub right_released: bool,
+}
+
+#[derive(Resource, Debug, Default)]
+pub struct UiInputCapture {
+    pub mouse_wheel: bool,
 }
 
 impl Default for MouseState {
@@ -81,33 +95,93 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (mouse_input, toggle_side_panel_input).chain());
+        app.init_resource::<UiInputCapture>().add_systems(
+            Update,
+            (
+                mouse_input,
+                toggle_side_panel_input,
+                scroll_panel_input,
+            )
+                .chain(),
+        );
+    }
+}
+
+pub fn scroll_panel_input(
+    mut mouse_wheel: MessageReader<MouseWheel>,
+    window: Single<&Window>,
+    ui_index: Res<UiEntityIndex>,
+    mut scroll_nodes: Query<(
+        &mut ScrollPosition,
+        &ComputedNode,
+        &UiGlobalTransform,
+    )>,
+    mut ui_input_capture: ResMut<UiInputCapture>,
+) {
+    ui_input_capture.mouse_wheel = false;
+
+    let Some(cursor_position) = window.physical_cursor_position() else {
+        mouse_wheel.clear();
+        return;
+    };
+    let scroll_delta = mouse_wheel
+        .read()
+        .map(|event| match event.unit {
+            MouseScrollUnit::Line => -event.y * 40.0,
+            MouseScrollUnit::Pixel => -event.y,
+        })
+        .sum::<f32>();
+
+    for viewport_id in [
+        "build_icon_viewport",
+        "unit_icon_viewport",
+        "research_icon_viewport",
+    ] {
+        let Some(entity) = ui_index.entities.get(viewport_id) else {
+            continue;
+        };
+        let Ok((mut scroll_position, computed_node, transform)) = scroll_nodes.get_mut(*entity)
+        else {
+            continue;
+        };
+        if !computed_node.contains_point(*transform, cursor_position) {
+            continue;
+        }
+
+        ui_input_capture.mouse_wheel = true;
+        let max_scroll = (computed_node.content_size().y - computed_node.size().y)
+            * computed_node.inverse_scale_factor();
+        scroll_position.y =
+            (scroll_position.y + scroll_delta).clamp(0.0, max_scroll.max(0.0));
+        break;
     }
 }
 
 pub fn toggle_side_panel_input(
     keys: Res<ButtonInput<KeyCode>>,
     ui_index: Res<UiEntityIndex>,
-    nodes: Query<(&Node, &UiTransform)>,
+    transforms: Query<&UiTransform>,
     mut commands: Commands,
 ) {
-    if !keys.just_pressed(KeyCode::ShiftLeft) {
-        return;
+    if keys.just_pressed(KeyCode::ShiftLeft) {
+        if let Some(entity) = ui_index.entities.get("side_panel") {
+            if let Ok(transform) = transforms.get(*entity) {
+                commands.trigger(ToggleSidePanelEvent(transform.translation.x));
+            }
+        }
     }
-    println!("Shift key pressed, toggling side panel");
-    let Some(entity) = ui_index.entities.get("side_panel") else {
-        warn!("Side panel entity not found in UiEntityIndex");
-        return;
+
+    let bottom_panel = if keys.just_pressed(KeyCode::KeyQ) {
+        Some(BottomPanel::Build)
+    } else if keys.just_pressed(KeyCode::KeyW) {
+        Some(BottomPanel::Unit)
+    } else if keys.just_pressed(KeyCode::KeyE) {
+        Some(BottomPanel::Research)
+    } else {
+        None
     };
 
-    let Ok((node, transform)) = nodes.get(*entity) else {
-        warn!("Side panel entity does not have a Node component");
-        return;
-    };
-    println!("Side panel node left: {:?}, Transform: {:?}", node.left, transform);
-    let Ok(offset) = transform.translation.x.try_add(node.left) else {
-        warn!("Failed to calculate new offset for side panel");
-        return;
-    };
-    commands.trigger(ToggleSidePanelEvent(offset));
+    if let Some(bottom_panel) = bottom_panel {
+        commands.trigger(ToggleBottomPanelEvent(bottom_panel));
+    }
 }
