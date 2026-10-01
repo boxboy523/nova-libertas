@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::{prelude::*, render::render_resource::AsBindGroup, shader::ShaderRef};
 use strum::IntoEnumIterator;
 
-use crate::prelude::Team;
+use crate::unit::component::Team;
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
 pub struct TeamColorMaterial {

@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use bevy_hui::prelude::UiId;
 
-use crate::ui::{
+use crate::{player::PlayerState, thing::ThingType, ui::{
     BottomPanel, UiEntityIndex,
-    components::{HpBarRef, TweenBehavior, UiTween},
-};
+    components::{HpBarRef, TweenBehavior, UiTween, UnitSlot}, util::unit_to_icon,
+}, unit::component::Selected};
 
 const BOTTOM_PANEL_Z_INDEX: i32 = 200;
 const OPENING_BOTTOM_PANEL_Z_INDEX: i32 = BOTTOM_PANEL_Z_INDEX + 1;
@@ -28,6 +28,8 @@ pub fn add_uiid(
     trigger: On<Add, UiId>,
     query: Query<&UiId>,
     mut ui_index: ResMut<UiEntityIndex>,
+    player_state: Res<PlayerState>,
+    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     let Ok(ui_id) = query.get(trigger.entity) else {
@@ -38,6 +40,26 @@ pub fn add_uiid(
         .entities
         .insert(ui_id.as_str().to_owned(), trigger.entity);
 
+    if let Some(slot) = ui_id
+        .as_str()
+        .strip_prefix("unit_")
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| (1..=9).contains(&n)) {
+        let index = slot - 1;
+        if let Some(unit_type) = player_state.unit_loadout[index] {
+            let icon_handle = unit_to_icon(unit_type, &asset_server);
+            match icon_handle {
+                Ok(handle) => {
+                    let icon = commands.spawn((ImageNode::new(handle),Node {height: Val::Percent(75.0),aspect_ratio: Some(1.0),..Default::default()},Pickable::IGNORE,)).id();
+                    commands.entity(trigger.entity).add_child(icon);
+                    commands.entity(trigger.entity).insert(UnitSlot(index)).observe(on_unit_slot_clicked);
+                }
+                Err(e) => {
+                    warn!("Failed to load icon for unit {:?}: {}", unit_type, e);
+                }
+            }
+        }
+    }
     match ui_id.as_str() {
         "side_panel" => {
             commands.entity(trigger.entity).insert(
@@ -71,7 +93,6 @@ pub fn add_uiid(
                 .entity(trigger.entity)
                 .insert(ScrollPosition(Vec2::ZERO));
         }
-
         _ => {}
     }
 }
@@ -327,4 +348,29 @@ pub fn toggle_bottom_panel(
         target_up,
     });
     commands.trigger(SetDetailPanelOpenEvent(detail_panel_open));
+}
+
+pub fn on_unit_slot_clicked(
+    trigger: On<Pointer<Click>>,
+    mut commands: Commands,
+    unit_slot_query: Query<&UnitSlot>,
+    selected_query: Query<Entity, With<Selected>>,
+    units: Query<(Entity, &ThingType)>,
+    player_state: Res<PlayerState>,
+) {
+    let Ok(unit_slot) = unit_slot_query.get(trigger.entity) else {
+        warn!("Clicked entity does not have a UnitSlot component");
+        return;
+    };
+    let index = unit_slot.0;
+    if let Some(unit_type) = player_state.unit_loadout[index] {
+        selected_query.iter().for_each(|entity| {
+            commands.entity(entity).remove::<Selected>();
+        });
+        units.iter().for_each(|(entity, thing_type)| {
+            if *thing_type == unit_type {
+                commands.entity(entity).insert(Selected);
+            }
+        });
+    }
 }

@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{thing::ThingType, unit::component::Team};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 

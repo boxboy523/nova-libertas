@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use bevy_hui::HuiPlugin;
-use bevy_test::{
-    map::{GameMap, TerrainHeightMap},
-    prelude::*,
+use nova_libertas::{
+    combat::CombatPlugin, constants::CELL_SIZE, debug::DebugPlugin, input::{InputPlugin, MouseState}, map::{GameMap, TerrainHeightMap}, movement::{MovementPlugin, flow_grid::FlowGrid}, player::PlayerPlugin, thing::ThingCatalog, ui::UIPlugin, unit::{UnitPlugin, spatial_grid::SpatialGrid}, visual::{SpritePlugin, team_color::TeamColorMaterial}, world3d::World3DPlugin
 };
 
 fn main() {
@@ -17,6 +16,7 @@ fn main() {
         .add_plugins(HuiPlugin)
         .init_resource::<MouseState>()
         .insert_resource(Time::<Fixed>::from_hz(60.0))
+        .insert_resource(game_map)
         .insert_resource(flow_grid)
         .insert_resource(spatial_grid)
         .insert_resource(thing_catalog)
@@ -30,6 +30,7 @@ fn main() {
         .add_plugins(UnitPlugin)
         .add_plugins(MovementPlugin)
         .add_plugins(World3DPlugin)
-        .add_systems(PostStartup, bevy_test::setup)
+        .add_plugins(PlayerPlugin)
+        .add_systems(PostStartup, nova_libertas::setup)
         .run();
 }

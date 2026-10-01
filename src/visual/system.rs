@@ -1,4 +1,12 @@
-use crate::prelude::*;
+use crate::{
+    combat::component::Attack,
+    constants::SWITCH_FACE_ANGLE,
+    movement::component::{Moving, Stopped, UnitMovement},
+    thing::ThingType,
+    unit::component::Team,
+    visual::{data::{AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState, CurrentAnimation}, info::{SpriteConfig, SpriteInfoKind}, team_color::TeamColorMaterial, SpriteCatalog, UnitVisual, UnitVisualKind},
+    world3d::create_atlas_quad,
+};
 use bevy::prelude::*;
 use strum::IntoEnumIterator;
 

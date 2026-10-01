@@ -4,7 +4,7 @@ use chunk_flow_field::map::{
     Obstacle, Side, CELL_BLOCKED, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP,
 };
 
-use crate::prelude::TERRAIN_HEIGHT_STEP;
+use crate::constants::TERRAIN_HEIGHT_STEP;
 
 #[derive(Resource, Debug, Clone)]
 pub struct GameMap {
@@ -143,6 +143,13 @@ impl GameMap {
             }
         }
         obstacle
+    }
+
+    pub fn get_size(&self) -> Vec2 {
+        Vec2::new(
+            (self.width - 1) as f32 * self.cell_size,
+            (self.height - 1) as f32 * self.cell_size,
+        )
     }
 }
 

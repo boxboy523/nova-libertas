@@ -1581,23 +1581,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_test"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_heightmap",
- "bevy_hui",
- "chunk-flow-field",
- "dodgy_2d",
- "rayon",
- "serde",
- "strum",
- "tiled",
- "toml",
-]
-
-[[package]]
 name = "bevy_text"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3681,6 +3664,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
 dependencies = [
  "bitflags 2.13.1",
+]
+
+[[package]]
+name = "nova_libertas"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_heightmap",
+ "bevy_hui",
+ "chunk-flow-field",
+ "dodgy_2d",
+ "rayon",
+ "serde",
+ "strum",
+ "tiled",
+ "toml",
 ]
 
 [[package]]

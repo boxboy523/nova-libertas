@@ -1,7 +1,9 @@
 use crate::{
     input::{UiInputCapture, scroll_panel_input},
-    map::{GameMap, TerrainHeightMap},
-    prelude::*,
+    constants::{CAMERA_MOUSE_DEADZONE, CAMERA_PITCH, CAMERA_YAW},
+    map::TerrainHeightMap,
+    unit::component::Team,
+    visual::UnitVisual,
 };
 use bevy::{mesh::VertexAttributeValues, prelude::*};
 

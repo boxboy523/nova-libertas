@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::prelude::*;
+use crate::{combat::component::UnitBattleStats, unit::component::UnitStats};
 use bevy::{platform::collections::HashMap, prelude::*};
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
@@ -31,6 +31,10 @@ impl ThingType {
         let info_path = self.get_path().join("info.toml");
         let text = std::fs::read_to_string(info_path).expect("Failed to read thing info file");
         toml::from_str(&text).expect("Failed to parse thing info file")
+    }
+
+    pub fn is_unit(&self) -> bool {
+        matches!(self, ThingType::AttackerGun | ThingType::AttackerCannon)
     }
 }
 

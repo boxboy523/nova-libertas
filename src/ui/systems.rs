@@ -2,17 +2,20 @@ use std::collections::HashSet;
 
 use bevy::prelude::*;
 use bevy_hui::prelude::{HtmlComponents, HtmlNode};
-use bevy_hui::prelude::UiId;
 
-use crate::ui::components::UiTween;
+use crate::map::GameMap;
+use crate::ui::components::{MinimapMarker, UiTween};
 use crate::ui::components::UiTweenState;
 use crate::ui::events::TweenFinishedEvent;
 use crate::{
-    input::MouseState,
+    combat::{component::UnitHp, event::AttackOrderEvent},
+    input::{screen_to_ground, MouseState},
     map::TerrainHeightMap,
-    prelude::*,
+    movement::event::MoveOrderEvent,
+    thing::ThingType,
     ui::components::{DragSelection, HpBarFill, HpBarRef, HpBarRoot},
-    ui::UiEntityIndex
+    unit::{component::{Position, Selected, Team}, spatial_grid::SpatialGrid},
+    visual::SpriteCatalog,
 };
 
 
@@ -336,4 +339,58 @@ pub fn animate_ui_tween(
             },
         }
     });
+}
+
+pub fn minimap_system(
+    mut commands: Commands,
+    units: Query<(Entity, &Position, &Team, Option<&MinimapMarker>), Or<(Changed<Position>, Without<MinimapMarker>)>>,
+    mut query: Query<&mut Node>,
+    ui_index: Res<crate::ui::UiEntityIndex>,
+    map: Res<GameMap>,
+) {
+    let Some(minimap_panel) = ui_index.entities.get("minimap_panel") else {
+        return;
+    };
+    units.iter().for_each(|(unit_entity, position, team, minimap)| {
+        let mut spawn_new = false;
+        let map_size = map.get_size();
+        let percent_x = position.x / map_size.x * 90.0 + 5.0;
+        let percent_y = position.y / map_size.y * 90.0 + 5.0;
+        if minimap.is_none() {
+            spawn_new = true;
+        } else {
+            if let Ok(mut node) = query.get_mut(minimap.unwrap().target) {
+                node.left = Val::Percent(percent_x);
+                node.top = Val::Percent(percent_y);
+            } else {
+                spawn_new = true;
+            }
+        }
+        if spawn_new {
+            let entity = commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: px(3.0),
+                height: px(3.0),
+                left: Val::Percent(percent_x),
+                top: Val::Percent(percent_y),
+                border_radius: BorderRadius::MAX,
+                ..default()
+            },
+            BackgroundColor(match team {
+                Team::Player => Color::srgb(0.2, 1.0, 0.2), // Green
+                Team::Enemy => Color::srgb(1.0, 0.2, 0.2), // Red
+                Team::Neutral => Color::srgb(0.2, 0.2, 0.2), // Gray
+                Team::Empty => Color::srgb(1.0, 1.0, 1.0), // White
+            }),
+            ZIndex(200),
+            )).id();
+            commands.entity(*minimap_panel).add_child(entity);
+            commands.entity(unit_entity).insert(MinimapMarker {
+                target: entity,
+                radius_px: 1.5,
+            });
+
+        }
+    })
 }

@@ -1,11 +1,11 @@
-use crate::prelude::*;
+use crate::input::mouse_input;
 use bevy::{platform::collections::HashMap, prelude::*};
+use bevy_hui::HuiSystems;
 
 mod components;
 pub mod events;
 mod systems;
-pub struct UIPlugin;
-
+mod util;
 
 #[derive(Resource, Default)]
 pub struct UiEntityIndex {
@@ -65,6 +65,7 @@ impl BottomPanel {
     }
 }
 
+pub struct UIPlugin;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
@@ -96,7 +97,9 @@ impl Plugin for UIPlugin {
                 Update,
                     systems::animate_ui_tween,
             )
-            .add_observer(events::remove_hp_bar).add_observer(events::add_uiid)
+            .add_systems(Update, systems::minimap_system.after(HuiSystems::Build))
+            .add_observer(events::remove_hp_bar)
+            .add_observer(events::add_uiid)
             .add_observer(events::remove_uiid)
             .add_observer(events::toggle_side_panel)
             .add_observer(events::toggle_bottom_panel)

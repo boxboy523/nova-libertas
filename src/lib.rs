@@ -9,43 +9,7 @@ pub mod ui;
 pub mod unit;
 pub mod visual;
 pub mod world3d;
-
-pub mod prelude {
-    pub use crate::combat::{
-        component::{Attack, AutoAttack, Projectile, UnitBattleStats, UnitHp},
-        event::{AttackOrderEvent, DamageEvent},
-        CombatPlugin,
-    };
-    pub use crate::constants::*;
-    pub use crate::debug::DebugPlugin;
-    pub use crate::input::{mouse_input, screen_to_ground, InputPlugin, MouseState};
-    pub use crate::movement::{
-        component::{
-            DelayedStopTrigger, FieldFollowTarget, FlowField, Moving, Stopped, UnitMovement,
-        },
-        event::MoveOrderEvent,
-        flow_grid::FlowGrid,
-        set_moving, set_stopped, MovementPlugin,
-    };
-    pub use crate::thing::{ThingCatalog, ThingInfo, ThingType};
-    pub use crate::ui::UIPlugin;
-    pub use crate::unit::{
-        component::{Dead, Position, Selected, Team, UnitStats},
-        event::{SpawnUnitEvent, SpawnWallEvent},
-        spatial_grid::{CollisionResult, SpatialGrid},
-        UnitPlugin,
-    };
-    pub use crate::visual::{
-        data::{
-            AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState,
-            CurrentAnimation,
-        },
-        info::{SpriteConfig, SpriteInfo, SpriteInfoKind, VisualAnchor},
-        team_color::TeamColorMaterial,
-        SpriteCatalog, SpritePlugin, UnitVisual, UnitVisualKind,
-    };
-    pub use crate::world3d::{create_atlas_quad, spawn_billboard, World3DPlugin};
-}
+pub mod player;
 
 pub fn load_map_from_csv(path: &str) -> (usize, usize, Vec<bool>) {
     let content = std::fs::read_to_string(path).unwrap();
@@ -62,7 +26,7 @@ pub fn load_map_from_csv(path: &str) -> (usize, usize, Vec<bool>) {
 }
 
 use bevy::prelude::*;
-use prelude::*;
+use crate::{thing::ThingType, unit::{component::Team, event::SpawnUnitEvent}};
 
 pub fn setup(mut commands: Commands) {
     for i in 1..7 {

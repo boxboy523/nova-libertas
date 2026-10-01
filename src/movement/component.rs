@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::prelude::STOP_RESP;
+use crate::constants::STOP_RESP;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct UnitMovement {

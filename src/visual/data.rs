@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::prelude::*;
+use crate::{unit::component::Team, visual::team_color::TeamColorMaterial};
 
 #[derive(Debug, Clone, Deref, DerefMut)]
 pub struct AnimationSet {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::prelude::*;
+use crate::{thing::ThingType, unit::component::Team, visual::{data::{AnimationKind, AnimationSet}, info::VisualAnchor, team_color::TeamColorMaterial}};
 use bevy::prelude::*;
 
 pub mod data;

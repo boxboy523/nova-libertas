@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::visual::data::AnimationKind;
 use std::{collections::HashMap, path::PathBuf};
 
 use bevy::prelude::*;

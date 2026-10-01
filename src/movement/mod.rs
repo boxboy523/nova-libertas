@@ -6,7 +6,7 @@ pub mod nav_system;
 
 use bevy::prelude::*;
 
-use crate::prelude::*;
+use crate::{combat::component::Attack, movement::component::{DelayedStopTrigger, Moving, Stopped}};
 
 pub struct MovementPlugin;
 

@@ -1,4 +1,4 @@
-use crate::{map::GameMap, prelude::*};
+use crate::{map::GameMap, movement::component::FlowField};
 use bevy::prelude::*;
 use chunk_flow_field::map::Map;
 

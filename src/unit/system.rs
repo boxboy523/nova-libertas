@@ -1,4 +1,8 @@
-use crate::{map::TerrainHeightMap, prelude::*, unit::spatial_grid::CellInfo};
+use crate::{
+    map::TerrainHeightMap,
+    movement::component::UnitMovement,
+    unit::{component::{Dead, Position, UnitStats}, event::SpawnWallEvent, spatial_grid::{CellInfo, SpatialGrid}},
+};
 use bevy::prelude::*;
 
 pub fn despawn_units_system(mut commands: Commands, dead_query: Query<Entity, With<Dead>>) {

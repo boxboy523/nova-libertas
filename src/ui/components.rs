@@ -120,3 +120,12 @@ pub struct UiTween {
     pub target_left: TweenBehavior,
     pub target_up: TweenBehavior,
 }
+
+#[derive(Component)]
+pub struct MinimapMarker {
+    pub target: Entity,
+    pub radius_px: f32,
+}
+
+#[derive(Component)]
+pub struct UnitSlot(pub usize);
