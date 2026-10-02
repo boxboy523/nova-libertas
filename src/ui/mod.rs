@@ -14,6 +14,7 @@ pub struct UiEntityIndex {
 
 #[derive(Resource, Default)]
 pub struct UiState {
+    pub last_selected_slot: Option<usize>,
     pub side_panel: PanelState,
     pub build_panel: PanelState,
     pub unit_panel: PanelState,
@@ -97,12 +98,19 @@ impl Plugin for UIPlugin {
                 Update,
                     systems::animate_ui_tween,
             )
-            .add_systems(Update, systems::minimap_system.after(HuiSystems::Build))
+            .add_systems(Update,
+                systems::minimap_system.after(HuiSystems::Build))
+            .add_systems(
+                Update,
+                systems::update_resource_text.after(HuiSystems::Build),
+)
             .add_observer(events::remove_hp_bar)
             .add_observer(events::add_uiid)
             .add_observer(events::remove_uiid)
             .add_observer(events::toggle_side_panel)
             .add_observer(events::toggle_bottom_panel)
+            .add_observer(events::select_unit_slot)
+            .add_observer(events::select_all_units)
             .add_observer(events::set_detail_panel_open)
             .add_observer(events::tween_finished);
     }

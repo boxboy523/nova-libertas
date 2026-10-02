@@ -6,8 +6,8 @@ use bevy::{
 use crate::{
     map::TerrainHeightMap,
     ui::{
-        BottomPanel, UiEntityIndex,
-        events::{ToggleBottomPanelEvent, ToggleSidePanelEvent},
+        BottomPanel, UiEntityIndex, UiState,
+        events::{SelectAllUnitsEvent, SelectUnitSlotEvent, ToggleBottomPanelEvent, ToggleSidePanelEvent},
     },
 };
 
@@ -27,6 +27,9 @@ pub struct MouseState {
 #[derive(Resource, Debug, Default)]
 pub struct UiInputCapture {
     pub mouse_wheel: bool,
+    pub pointer_over_ui: bool,
+    pub left_captured: bool,
+    pub right_captured: bool,
 }
 
 impl Default for MouseState {
@@ -98,12 +101,66 @@ impl Plugin for InputPlugin {
         app.init_resource::<UiInputCapture>().add_systems(
             Update,
             (
+                update_ui_input_capture,
                 mouse_input,
                 toggle_side_panel_input,
+                select_unit_slot_input,
                 scroll_panel_input,
             )
                 .chain(),
         );
+    }
+}
+
+/// Decide which mouse gestures belong to the UI before map input runs.
+/// Capture survives the release frame and is cleared on the following frame.
+pub fn update_ui_input_capture(
+    buttons: Res<ButtonInput<MouseButton>>,
+    window: Single<&Window>,
+    ui_index: Res<UiEntityIndex>,
+    nodes: Query<(&ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
+    mut capture: ResMut<UiInputCapture>,
+) {
+    capture.pointer_over_ui = window.physical_cursor_position().is_some_and(|cursor| {
+        [
+            "main_status_panel",
+            "minimap_panel",
+            "side_panel",
+            "detail_panel",
+            "build_panel",
+            "unit_panel",
+            "research_panel",
+            "right_list",
+            "options_button",
+            "quickslot_1",
+            "quickslot_2",
+            "quickslot_3",
+        ]
+        .iter()
+        .any(|id| {
+            ui_index.entities.get(*id).is_some_and(|entity| {
+                nodes.get(*entity).is_ok_and(|(node, transform, visible)| {
+                    visible.get() && node.contains_point(*transform, cursor)
+                })
+            })
+        })
+    });
+
+    // Do not clear on just_released: map consumers must see ownership of release.
+    if buttons.just_pressed(MouseButton::Left) {
+        capture.left_captured = capture.pointer_over_ui;
+    } else if !buttons.pressed(MouseButton::Left)
+        && !buttons.just_released(MouseButton::Left)
+    {
+        capture.left_captured = false;
+    }
+
+    if buttons.just_pressed(MouseButton::Right) {
+        capture.right_captured = capture.pointer_over_ui;
+    } else if !buttons.pressed(MouseButton::Right)
+        && !buttons.just_released(MouseButton::Right)
+    {
+        capture.right_captured = false;
     }
 }
 
@@ -154,6 +211,49 @@ pub fn scroll_panel_input(
         scroll_position.y =
             (scroll_position.y + scroll_delta).clamp(0.0, max_scroll.max(0.0));
         break;
+    }
+}
+
+pub fn select_unit_slot_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    player: Res<crate::player::PlayerState>,
+    ui_state: Res<UiState>,
+    mut commands: Commands,
+) {
+    // The physical backquote key is the usual ` / ~ key; Shift is not required.
+    if keys.just_pressed(KeyCode::Backquote) {
+        commands.trigger(SelectAllUnitsEvent);
+        return;
+    }
+    if keys.just_pressed(KeyCode::Tab) {
+        let start = ui_state.last_selected_slot.map_or(0, |index| index + 1);
+        if let Some(index) = player.unit_loadout.iter().enumerate()
+            .skip(start).find_map(|(index, slot)| slot.is_some().then_some(index))
+        {
+            commands.trigger(SelectUnitSlotEvent { index });
+        } else {
+            commands.trigger(SelectAllUnitsEvent);
+        }
+        return;
+    }
+    for (index, key) in [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if keys.just_pressed(key) {
+            commands.trigger(SelectUnitSlotEvent { index });
+            break;
+        }
     }
 }
 

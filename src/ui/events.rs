@@ -4,7 +4,7 @@ use bevy_hui::prelude::UiId;
 use crate::{player::PlayerState, thing::ThingType, ui::{
     BottomPanel, UiEntityIndex,
     components::{HpBarRef, TweenBehavior, UiTween, UnitSlot}, util::unit_to_icon,
-}, unit::component::Selected};
+}, unit::component::{Selected, Team}};
 
 const BOTTOM_PANEL_Z_INDEX: i32 = 200;
 const OPENING_BOTTOM_PANEL_Z_INDEX: i32 = BOTTOM_PANEL_Z_INDEX + 1;
@@ -61,6 +61,30 @@ pub fn add_uiid(
         }
     }
     match ui_id.as_str() {
+        "unit_all" => {
+            commands.entity(trigger.entity).observe(
+                |click: On<Pointer<Click>>, mut commands: Commands| {
+                    if click.button == bevy::picking::pointer::PointerButton::Primary {
+                        commands.trigger(SelectAllUnitsEvent);
+                    }
+                },
+            );
+        }
+        "red_panel" | "blue_panel" | "green_panel" => {
+            let panel = match ui_id.as_str() {
+                "red_panel" => BottomPanel::Build,
+                "blue_panel" => BottomPanel::Unit,
+                "green_panel" => BottomPanel::Research,
+                _ => unreachable!(),
+            };
+            commands.entity(trigger.entity).observe(
+                move |click: On<Pointer<Click>>, mut commands: Commands| {
+                    if click.button == bevy::picking::pointer::PointerButton::Primary {
+                        commands.trigger(ToggleBottomPanelEvent(panel));
+                    }
+                },
+            );
+        }
         "side_panel" => {
             commands.entity(trigger.entity).insert(
                 UiTransform::from_translation(Val2::new(
@@ -354,23 +378,61 @@ pub fn on_unit_slot_clicked(
     trigger: On<Pointer<Click>>,
     mut commands: Commands,
     unit_slot_query: Query<&UnitSlot>,
-    selected_query: Query<Entity, With<Selected>>,
-    units: Query<(Entity, &ThingType)>,
-    player_state: Res<PlayerState>,
 ) {
+    if trigger.button != bevy::picking::pointer::PointerButton::Primary {
+        return;
+    }
     let Ok(unit_slot) = unit_slot_query.get(trigger.entity) else {
         warn!("Clicked entity does not have a UnitSlot component");
         return;
     };
-    let index = unit_slot.0;
-    if let Some(unit_type) = player_state.unit_loadout[index] {
+    commands.trigger(SelectUnitSlotEvent { index: unit_slot.0 });
+}
+
+/// Select all player units of the type assigned to a zero-based loadout slot.
+#[derive(Event)]
+pub struct SelectUnitSlotEvent {
+    pub index: usize,
+}
+
+pub fn select_unit_slot(
+    event: On<SelectUnitSlotEvent>,
+    mut commands: Commands,
+    selected_query: Query<Entity, With<Selected>>,
+    units: Query<(Entity, &ThingType, &Team)>,
+    player_state: Res<PlayerState>,
+    mut ui_state: ResMut<crate::ui::UiState>,
+) {
+    if let Some(&Some(unit_type)) = player_state.unit_loadout.get(event.index) {
+        ui_state.last_selected_slot = Some(event.index);
         selected_query.iter().for_each(|entity| {
             commands.entity(entity).remove::<Selected>();
         });
-        units.iter().for_each(|(entity, thing_type)| {
-            if *thing_type == unit_type {
+        units.iter().for_each(|(entity, thing_type, team)| {
+            if *thing_type == unit_type && *team == Team::Player {
                 commands.entity(entity).insert(Selected);
             }
         });
+    }
+}
+
+#[derive(Event)]
+pub struct SelectAllUnitsEvent;
+
+pub fn select_all_units(
+    _event: On<SelectAllUnitsEvent>,
+    mut commands: Commands,
+    selected_query: Query<Entity, With<Selected>>,
+    teams: Query<(Entity, &Team)>,
+    mut ui_state: ResMut<crate::ui::UiState>,
+) {
+    ui_state.last_selected_slot = None;
+    for entity in &selected_query {
+        commands.entity(entity).remove::<Selected>();
+    }
+    for (entity, team) in &teams {
+        if *team == Team::Player {
+            commands.entity(entity).insert(Selected);
+        }
     }
 }

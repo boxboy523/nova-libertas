@@ -3,8 +3,16 @@ use bevy::prelude::*;
 use crate::thing::ThingType;
 
 #[derive(Resource, Debug, Default)]
+pub struct Resources {
+    pub ore: u32,
+    pub oil: u32,
+    pub human: u32,
+}
+
+#[derive(Resource, Debug, Default)]
 pub struct PlayerState {
     pub unit_loadout: [Option<ThingType>; 9],
+    pub resources: Resources,
 }
 
 pub fn player_state_init(mut state: ResMut<PlayerState>) {
@@ -20,6 +28,11 @@ pub fn player_state_init(mut state: ResMut<PlayerState>) {
         None,
         None,
     ];
+    state.resources = Resources {
+        ore: 100,
+        oil: 50,
+        human: 10,
+    };
 }
 
 pub struct PlayerPlugin;

@@ -3,7 +3,10 @@ use std::collections::HashSet;
 use bevy::prelude::*;
 use bevy_hui::prelude::{HtmlComponents, HtmlNode};
 
+use crate::input::UiInputCapture;
 use crate::map::GameMap;
+use crate::player::PlayerState;
+use crate::ui::UiEntityIndex;
 use crate::ui::components::{MinimapMarker, UiTween};
 use crate::ui::components::UiTweenState;
 use crate::ui::events::TweenFinishedEvent;
@@ -90,8 +93,10 @@ pub fn selection_system(
     query_select: Query<Entity, With<Selected>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     team_query: Query<&Team>,
+    ui_input_capture: Res<UiInputCapture>,
+    mut ui_state: ResMut<crate::ui::UiState>,
 ) {
-    if state.left_just_pressed {
+    if state.left_just_pressed && !ui_input_capture.pointer_over_ui {
         let Ok(units_at_cursor) = spatial_grid.query_entities(state.world_position, 1.0, false)
         else {
             warn!("Failed to query spatial grid for units at cursor");
@@ -100,6 +105,7 @@ pub fn selection_system(
         if let Some(unit) = units_at_cursor.first() {
             if let Ok(team) = team_query.get(unit.entity) {
                 if *team == Team::Player {
+                    ui_state.last_selected_slot = None;
                     query_select.iter().for_each(|unit| {
                         command.entity(unit).remove::<Selected>();
                     });
@@ -120,10 +126,11 @@ pub fn selection_system(
             drag_selection.current = state.window_position;
             drag_selection.active = true;
         }
-    } else if state.left_pressed && drag_selection.active {
+    } else if state.left_pressed && drag_selection.active && !ui_input_capture.left_captured {
         drag_selection.current = state.window_position;
-    } else if state.left_released && drag_selection.active {
+    } else if state.left_released && drag_selection.active && !ui_input_capture.left_captured {
         drag_selection.active = false;
+        ui_state.last_selected_slot = None;
         query_select.iter().for_each(|unit| {
             command.entity(unit).remove::<Selected>();
         });
@@ -393,4 +400,35 @@ pub fn minimap_system(
 
         }
     })
+}
+
+pub fn update_resource_text(
+    player: Res<PlayerState>,
+    ui_index: Res<UiEntityIndex>,
+    mut texts: Query<&mut Text>,
+) {
+    if !player.is_changed() && !ui_index.is_changed() {
+        return;
+    }
+
+    for (id, value) in [
+        ("mineral_count", player.resources.ore),
+        ("gas_count", player.resources.oil),
+        ("power_count", player.resources.human),
+    ] {
+        let Some(&entity) = ui_index.entities.get(id) else {
+            warn!("UI entity for resource text '{}' not found", id);
+            continue;
+        };
+
+        let Ok(mut text) = texts.get_mut(entity) else {
+            warn!("Text component for resource text '{}' not found", id);
+            continue;
+        };
+
+        let next = value.to_string();
+        if text.0 != next {
+            text.0 = next;
+        }
+    }
 }

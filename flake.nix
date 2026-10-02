@@ -20,36 +20,26 @@
           extensions = [ "rust-src" "rust-analyzer" ];
         };
 
-        cargoBuilder = pkgs.writeShellScriptBin "b" ''
-          cargo build "$@"
-        '';
-
         # Bevy 빌드 및 런타임에 필요한 라이브러리들
         buildInputs = with pkgs; [
           # 빌드 도구
-          pkg-config
           alsa-lib
           udev
           openssl
-          llvmPackages.libclang
-          clang
           fontconfig
           freetype
 
-          cargoBuilder
-
           # 그래픽스 및 윈도우 시스템 (Vulkan, Wayland/X11)
-          vulkan-loader
-          vulkan-validation-layers
           libxkbcommon
+          xkeyboard-config
           wayland
           libx11
           libxcursor
           libxrandr
           libxi
-          libglvnd
-          libGL
-          vulkan-headers
+
+          vulkan-loader
+          mesa
         ];
 
       in
@@ -57,12 +47,27 @@
         devShells.default = pkgs.mkShell {
           inherit buildInputs;
 
-          nativeBuildInputs = [ rustToolchain ];
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
-          RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
-          #VK_LAYER_PATH = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
-          VK_ICD_FILENAMES = "/run/opengl-driver/share/vulkan/icd.d/radeon_icd.x86_64.json";
+          nativeBuildInputs = [
+            rustToolchain
+            pkgs.pkg-config
+            pkgs.clang
+            pkgs.llvmPackages.libclang
+          ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+            pkgs.alsa-lib
+            pkgs.udev
+            pkgs.libxkbcommon
+            pkgs.wayland
 
+            pkgs.vulkan-loader
+            pkgs.mesa
+          ];
+
+
+          XKB_CONFIG_ROOT = "${pkgs.xkeyboard-config}/share/X11/xkb";
+          VK_DRIVER_FILES =
+            "${pkgs.mesa}/share/vulkan/icd.d/radeon_icd.x86_64.json";
+          RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
           shellHook = ''
             echo "Cargo Version: $(cargo --version)"
           '';
