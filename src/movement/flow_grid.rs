@@ -1,6 +1,6 @@
 use crate::{map::GameMap, movement::component::FlowField};
 use bevy::prelude::*;
-use chunk_flow_field::map::Map;
+use chunk_flow_field::{map::Map, types::FlowFieldOptions};
 
 #[derive(Resource, Debug)]
 pub struct FlowGrid {
@@ -137,7 +137,12 @@ impl FlowGrid {
             x: (target.x / self.cell_size).floor() as usize,
             y: (target.y / self.cell_size).floor() as usize,
         };
-        let field = self.map.build_flow_field(goal)?;
+        let option = FlowFieldOptions {
+            wall_margin: 1.5,
+            wall_repulsion_strength: 0.4,
+            ..Default::default()
+        };
+        let field = self.map.build_flow_field(goal, &option)?;
         Ok(field.flow.into_iter().map(|opt| opt.map(to_vec2)).collect())
     }
 }

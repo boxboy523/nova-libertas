@@ -2002,7 +2002,7 @@ checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 [[package]]
 name = "chunk-flow-field"
 version = "0.2.0"
-source = "git+https://github.com/boxboy523/pathfinding?rev=e454101#e4541014ed68a6ba3fbd040048c923652e1395c5"
+source = "git+https://github.com/boxboy523/pathfinding?rev=38f24bf#38f24bf5cce411aa8ec117568e6ccb984696bd6a"
 dependencies = [
  "anyhow",
 ]
