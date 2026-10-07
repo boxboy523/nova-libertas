@@ -14,6 +14,7 @@ pub struct UiEntityIndex {
 
 #[derive(Resource, Default)]
 pub struct UiState {
+    pub options_open: bool,
     pub last_selected_slot: Option<usize>,
     pub side_panel: PanelState,
     pub build_panel: PanelState,
@@ -112,6 +113,7 @@ impl Plugin for UIPlugin {
             .add_observer(events::select_unit_slot)
             .add_observer(events::select_all_units)
             .add_observer(events::set_detail_panel_open)
+            .add_observer(events::set_options_panel_open)
             .add_observer(events::tween_finished);
     }
 }

@@ -29,35 +29,14 @@ pub fn apply_move_system(
 }
 
 pub fn smooth_wall_passing_system(
-    mut query: Query<(Entity, &Position, &mut UnitMovement, &UnitStats)>,
+    mut query: Query<(Entity, &mut Position, &mut UnitMovement, &UnitStats)>,
     spatial_grid: Res<SpatialGrid>,
     time: Res<Time>,
 ) {
     let delta = time.delta_secs();
     query
         .par_iter_mut()
-        .for_each(|(entity, position, mut movement, stats)| {
-            if let CollisionResult::Collided(_, walls) =
-                spatial_grid.collision_check(**position, stats.size, Some(&[entity]))
-            {
-                if !walls.is_empty() {
-                    let wall_center = Vec2::new(
-                        (walls[0].0 as f32 + 0.5) * spatial_grid.cell_size,
-                        (walls[0].1 as f32 + 0.5) * spatial_grid.cell_size,
-                    );
-                    let wall_vec = **position - wall_center;
-                    let normal = if wall_vec.x.abs() > wall_vec.y.abs() * 1.2 {
-                        Vec2::new(wall_vec.x.signum(), 0.0)
-                    } else if wall_vec.y.abs() > wall_vec.x.abs() * 1.2 {
-                        Vec2::new(0.0, wall_vec.y.signum())
-                    } else {
-                        wall_vec.xy().normalize_or_zero()
-                    };
-                    movement.dir_vec = normal;
-                    movement.speed = stats.max_speed;
-                    return;
-                }
-            }
+        .for_each(|(entity, mut position, mut movement, stats)| {
             if movement.speed < 0.0001 {
                 return; // 이동할 필요가 없으면 건너뜀
             }
@@ -66,30 +45,30 @@ pub fn smooth_wall_passing_system(
             let col_pos = **position + direction * (speed * delta);
             match spatial_grid.collision_check(
                 col_pos,
-                stats.size + OBSTACLE_MARGIN,
+                stats.size,
                 Some(&[entity]),
+                OBSTACLE_MARGIN
             ) {
                 CollisionResult::NoCollision => {}
-                CollisionResult::Collided(_, walls) => {
-                    if !walls.is_empty() {
-                        let wall_center = Vec2::new(
-                            (walls[0].0 as f32 + 0.5) * spatial_grid.cell_size,
-                            (walls[0].1 as f32 + 0.5) * spatial_grid.cell_size,
-                        );
-                        let wall_vec = **position - wall_center;
-                        let normal = if wall_vec.x.abs() > wall_vec.y.abs() * 1.2 {
-                            Vec2::new(wall_vec.x.signum(), 0.0)
-                        } else if wall_vec.y.abs() > wall_vec.x.abs() * 1.2 {
-                            Vec2::new(0.0, wall_vec.y.signum())
-                        } else {
-                            wall_vec.normalize_or_zero()
-                        };
-                        if normal.dot(direction) < 0.0 {
-                            movement.dir_vec =
-                                (direction - normal * direction.dot(normal)).normalize_or_zero();
+                CollisionResult::Collided(_, coll_info_vec) => {
+                    let mut max_penetration = 0.0;
+                    let mut avoidance_vector = Vec2::ZERO;
+                    let mut normal_sum = Vec2::ZERO;
+                    for coll_info in coll_info_vec {
+                        let penetration = coll_info.distance * -1.0;
+                        if penetration > max_penetration {
+                            max_penetration = penetration;
+                            avoidance_vector = coll_info.normal * penetration;
                         }
-                    } else {
+                        if coll_info.normal.dot(direction) < 0.0 {
+                            normal_sum += coll_info.normal;
+                        }
                     }
+                    normal_sum = normal_sum.normalize_or_zero();
+                    let new_dir = direction - normal_sum * direction.dot(normal_sum);
+                    movement.dir_vec = new_dir.normalize_or_zero() * speed;
+                    position.x += avoidance_vector.x;
+                    position.y += avoidance_vector.y;
                 }
                 CollisionResult::OutOfBounds => {
                     // 맵 경계 밖으로 나가지 않도록 위치 조정
@@ -130,8 +109,9 @@ pub fn stop_moving_unit_system(
         // 같은 명령을 수행중인 먹춘 유닛과 충돌하면 멈추도록 함
         match spatial_grid.collision_check(
             **position,
-            stats.size + STOP_COL_MARGIN,
+            stats.size,
             Some(&[entity]),
+            STOP_COL_MARGIN,
         ) {
             CollisionResult::NoCollision => {}
             CollisionResult::Collided(entity_info_vec, _) => {

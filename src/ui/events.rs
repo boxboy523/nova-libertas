@@ -29,6 +29,7 @@ pub fn add_uiid(
     query: Query<&UiId>,
     mut ui_index: ResMut<UiEntityIndex>,
     player_state: Res<PlayerState>,
+    ui_state: Res<crate::ui::UiState>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
@@ -61,6 +62,44 @@ pub fn add_uiid(
         }
     }
     match ui_id.as_str() {
+        "options_panel" => {
+            commands.entity(trigger.entity).insert((
+                GlobalZIndex(300),
+                if ui_state.options_open {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                },
+            ));
+        }
+        "options_button" | "options_panel_close" => {
+            let open = ui_id.as_str() == "options_button";
+            commands.entity(trigger.entity).observe(
+                move |mut click: On<Pointer<Click>>, mut commands: Commands| {
+                    if click.button == bevy::picking::pointer::PointerButton::Primary {
+                        click.propagate(false);
+                        commands.trigger(SetOptionsPanelOpenEvent(open));
+                    }
+                },
+            );
+        }
+        "detail_panel_close" => {
+            commands.entity(trigger.entity).observe(
+                |mut click: On<Pointer<Click>>,
+                 ui_state: Res<crate::ui::UiState>,
+                 mut commands: Commands| {
+                    if click.button != bevy::picking::pointer::PointerButton::Primary {
+                        return;
+                    }
+                    click.propagate(false);
+                    if let Some(panel) = BottomPanel::ALL.into_iter().find(|panel| {
+                        panel.state(&ui_state) == &crate::ui::PanelState::Open
+                    }) {
+                        commands.trigger(ToggleBottomPanelEvent(panel));
+                    }
+                },
+            );
+        }
         "unit_all" => {
             commands.entity(trigger.entity).observe(
                 |click: On<Pointer<Click>>, mut commands: Commands| {
@@ -232,6 +271,29 @@ pub fn tween_finished(
 
 #[derive(Event)]
 pub struct ToggleBottomPanelEvent(pub BottomPanel);
+
+#[derive(Event)]
+pub struct SetOptionsPanelOpenEvent(pub bool);
+
+pub fn set_options_panel_open(
+    event: On<SetOptionsPanelOpenEvent>,
+    mut ui_state: ResMut<crate::ui::UiState>,
+    ui_index: Res<UiEntityIndex>,
+    mut visibility: Query<&mut Visibility>,
+) {
+    let Some(&entity) = ui_index.entities.get("options_panel") else {
+        return;
+    };
+    let Ok(mut visibility) = visibility.get_mut(entity) else {
+        return;
+    };
+    ui_state.options_open = event.0;
+    *visibility = if event.0 {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+}
 
 #[derive(Event)]
 pub struct SetDetailPanelOpenEvent(pub bool);

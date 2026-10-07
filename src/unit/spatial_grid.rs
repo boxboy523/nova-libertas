@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use chunk_flow_field::map::{CELL_BLOCKED, EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP};
+use chunk_flow_field::map::{CELL_BLOCKED, EDGE_BOTTOM, EDGE_RIGHT};
 
 use crate::map::GameMap;
 
@@ -10,11 +10,17 @@ pub struct Ray {
     pub length: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
+pub struct Obstacle {
+    pub shape: parry2d::shape::SharedShape,
+    pub pose: parry2d::math::Pose,
+}
+
+#[derive(Debug, Clone)]
 pub enum CellInfo {
     Wall,
     Empty {
-        edge_mask: u8,
+        obstacle_vec: Vec<Obstacle>,
         entity_vec: Vec<EntityInfo>,
     },
 }
@@ -24,6 +30,12 @@ pub struct EntityInfo {
     pub entity: Entity,
     pub radius: f32,
     pub pos: Vec2,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CollisionInfo {
+    pub distance: f32,
+    pub normal: Vec2,
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +48,7 @@ pub enum RaycastResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CollisionResult {
-    Collided(Vec<EntityInfo>, Vec<(isize, isize)>),
+    Collided(Vec<EntityInfo>, Vec<CollisionInfo>), // Collided entites, Normal vectors of obstacles
     NoCollision,
     OutOfBounds,
 }
@@ -53,15 +65,39 @@ pub struct SpatialGrid {
 impl SpatialGrid {
     pub fn new(map: &GameMap) -> Self {
         let mut cells = vec![CellInfo::Wall; map.width * map.height];
-        for (i, is_wall) in map
-            .landforms
-            .iter()
-            .map(|l| l.blocked_mask & CELL_BLOCKED != 0)
-            .enumerate()
-        {
-            if !is_wall {
+        for (i, landform) in map.landforms.iter().enumerate() {
+            if landform.blocked_mask & CELL_BLOCKED == 0 {
+                let x = i % map.width;
+                let y = i / map.width;
+                let mut obstacle_vec = Vec::with_capacity(2);
+                // Store each shared edge once, in cell-local coordinates.
+                // Edges adjacent to Wall cells are already covered by their cuboids.
+                if x + 1 < map.width
+                    && landform.blocked_mask & EDGE_RIGHT != 0
+                    && map.landforms[i + 1].blocked_mask & CELL_BLOCKED == 0
+                {
+                    obstacle_vec.push(Obstacle {
+                        shape: parry2d::shape::SharedShape::segment(
+                            parry2d::math::Vec2::new(map.cell_size, 0.0),
+                            parry2d::math::Vec2::new(map.cell_size, map.cell_size),
+                        ),
+                        pose: parry2d::math::Pose::IDENTITY,
+                    });
+                }
+                if y + 1 < map.height
+                    && landform.blocked_mask & EDGE_BOTTOM != 0
+                    && map.landforms[i + map.width].blocked_mask & CELL_BLOCKED == 0
+                {
+                    obstacle_vec.push(Obstacle {
+                        shape: parry2d::shape::SharedShape::segment(
+                            parry2d::math::Vec2::new(0.0, map.cell_size),
+                            parry2d::math::Vec2::new(map.cell_size, map.cell_size),
+                        ),
+                        pose: parry2d::math::Pose::IDENTITY,
+                    });
+                }
                 cells[i] = CellInfo::Empty {
-                    edge_mask: map.landforms[i].blocked_mask,
+                    obstacle_vec,
                     entity_vec: Vec::with_capacity(16),
                 };
             }
@@ -104,7 +140,7 @@ impl SpatialGrid {
             return None; // 그리드 범위를 벗어남
         }
         if let CellInfo::Empty {
-            edge_mask: _,
+            obstacle_vec: _,
             entity_vec,
         } = &self.cells[grid_y * self.width + grid_x]
         {
@@ -266,67 +302,76 @@ impl SpatialGrid {
         position: Vec2,
         radius: f32,
         exclude: Option<&[Entity]>,
+        margin: f32,
     ) -> CollisionResult {
         let grid_radius = (radius / self.cell_size).ceil() as isize + 1;
         if let Some((grid_x, grid_y)) = self.world_to_grid(position) {
             let mut collided_entities = Vec::new();
-            let mut collided_walls = Vec::new();
+            let mut obstacles = Vec::new();
+            let mut collision_infos = Vec::new();
             for y in (grid_y as isize - grid_radius)..=(grid_y as isize + grid_radius) {
                 for x in (grid_x as isize - grid_radius)..=(grid_x as isize + grid_radius) {
                     if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
+                        let cell_x = x as f32 * self.cell_size;
+                        let cell_y = y as f32 * self.cell_size;
                         let idx = (y as usize) * self.width + (x as usize);
-                        if let CellInfo::Empty {
-                            edge_mask,
-                            entity_vec,
-                        } = &self.cells[idx]
-                        {
-                            for entity in entity_vec {
-                                if let Some(ex) = exclude {
-                                    if ex.contains(&entity.entity) {
-                                        continue;
+                        match  &self.cells[idx] {
+                            CellInfo::Empty {
+                                obstacle_vec,
+                                entity_vec,
+                            } => {
+                                for entity in entity_vec {
+                                    if let Some(ex) = exclude {
+                                        if ex.contains(&entity.entity) {
+                                            continue;
+                                        }
+                                    }
+                                    if (position - entity.pos).length_squared() < (radius + entity.radius + margin).powi(2) {
+                                        collided_entities.push(entity.clone());
                                     }
                                 }
-                                if (position - entity.pos).length_squared()
-                                    < (radius + entity.radius).powi(2)
-                                {
-                                    collided_entities.push(entity.clone());
+                                for obstacle in obstacle_vec {
+                                    let mut obstacle_moved = obstacle.clone();
+                                    obstacle_moved.pose.translation +=
+                                    parry2d::math::Vec2::new(x as f32 * self.cell_size, y as f32 * self.cell_size);
+                                    obstacles.push(obstacle_moved);
                                 }
+                            },
+                            CellInfo::Wall => {
+                                let obstacle = Obstacle {
+                                    shape: parry2d::shape::SharedShape::cuboid(self.cell_size / 2.0, self.cell_size / 2.0).into(),
+                                    pose: parry2d::math::Pose::new(
+                                        parry2d::math::Vec2::new(cell_x + self.cell_size / 2.0, cell_y + self.cell_size / 2.0), 0.0),
+                                };
+                                obstacles.push(obstacle);
                             }
-                            let min_x = x as f32 * self.cell_size;
-                            let max_x = min_x + self.cell_size;
-                            let min_y = y as f32 * self.cell_size;
-                            let max_y = min_y + self.cell_size;
-
-                            let faces_unit = (edge_mask & EDGE_TOP != 0 && position.y < min_y)
-                                || (edge_mask & EDGE_BOTTOM != 0 && position.y > max_y)
-                                || (edge_mask & EDGE_LEFT != 0 && position.x < min_x)
-                                || (edge_mask & EDGE_RIGHT != 0 && position.x > max_x);
-                            if faces_unit {
-                                let nearest_x = position.x.clamp(min_x, max_x);
-                                let nearest_y = position.y.clamp(min_y, max_y);
-
-                                let dist_sq = (position.x - nearest_x).powi(2)
-                                    + (position.y - nearest_y).powi(2);
-                                if dist_sq < radius.powi(2) {
-                                    collided_walls.push((x, y));
-                                }
-                            }
-                        } else {
-                            let cell_x = x as f32 * self.cell_size;
-                            let cell_y = y as f32 * self.cell_size;
-                            let nearest_x = position.x.clamp(cell_x, cell_x + self.cell_size);
-                            let nearest_y = position.y.clamp(cell_y, cell_y + self.cell_size);
-                            let dist_sq =
-                                (position.x - nearest_x).powi(2) + (position.y - nearest_y).powi(2);
-                            if dist_sq < radius.powi(2) {
-                                collided_walls.push((x, y));
+                        }
+                        for obstacle in &obstacles {
+                            let unit_shape = parry2d::shape::Ball::new(radius);
+                            let unit_pose = parry2d::math::Pose::new(parry2d::math::Vec2::new(position.x, position.y), 0.0);
+                            let Ok(result) = parry2d::query::contact(
+                                &obstacle.pose,
+                                obstacle.shape.as_ref(),
+                                &unit_pose,
+                                &unit_shape,
+                                margin,
+                            ) else {
+                                warn!("Failed to compute contact between obstacle and unit");
+                                continue;
+                            };
+                            if let Some(contact) = result {
+                                let normal = contact.normal1;
+                                collision_infos.push(CollisionInfo {
+                                    distance: contact.dist,
+                                    normal: Vec2::new(normal.x, normal.y),
+                                });
                             }
                         }
                     }
                 }
             }
-            if !collided_entities.is_empty() || !collided_walls.is_empty() {
-                return CollisionResult::Collided(collided_entities, collided_walls);
+            if !collided_entities.is_empty() || !collision_infos.is_empty() {
+                return CollisionResult::Collided(collided_entities, collision_infos);
             }
         } else {
             return CollisionResult::OutOfBounds;
@@ -341,7 +386,7 @@ impl SpatialGrid {
         let idx = grid_y * self.width + grid_x;
         if idx < self.cells.len() {
             if let CellInfo::Empty {
-                edge_mask: _,
+                obstacle_vec: _,
                 entity_vec,
             } = &mut self.cells[idx]
             {
@@ -358,7 +403,7 @@ impl SpatialGrid {
     pub fn clear(&mut self) {
         for cell in &mut self.cells {
             if let CellInfo::Empty {
-                edge_mask: _,
+                obstacle_vec: _,
                 entity_vec,
             } = cell
             {
@@ -384,7 +429,7 @@ impl SpatialGrid {
                 if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
                     let idx = (y as usize) * self.width + (x as usize);
                     if let CellInfo::Empty {
-                        edge_mask: _,
+                        obstacle_vec: _,
                         entity_vec,
                     } = &self.cells[idx]
                     {
@@ -418,7 +463,7 @@ impl SpatialGrid {
                 if x < self.width && y < self.height {
                     let idx = y * self.width + x;
                     if let CellInfo::Empty {
-                        edge_mask: _,
+                        obstacle_vec: _,
                         entity_vec,
                     } = &self.cells[idx]
                     {
@@ -441,7 +486,7 @@ impl SpatialGrid {
             for x in (grid_x as isize - radius_in_cells)..=(grid_x as isize + radius_in_cells) {
                 if x >= 0 && x < self.width as isize && y >= 0 && y < self.height as isize {
                     let idx = (y as usize) * self.width + (x as usize);
-                    if self.cells[idx] == CellInfo::Wall {
+                    if matches!(self.cells[idx], CellInfo::Wall) {
                         result.push((x as usize, y as usize));
                     }
                 }

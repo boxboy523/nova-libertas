@@ -118,10 +118,11 @@ pub fn update_ui_input_capture(
     buttons: Res<ButtonInput<MouseButton>>,
     window: Single<&Window>,
     ui_index: Res<UiEntityIndex>,
+    ui_state: Res<crate::ui::UiState>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
     mut capture: ResMut<UiInputCapture>,
 ) {
-    capture.pointer_over_ui = window.physical_cursor_position().is_some_and(|cursor| {
+    capture.pointer_over_ui = ui_state.options_open || window.physical_cursor_position().is_some_and(|cursor| {
         [
             "main_status_panel",
             "minimap_panel",

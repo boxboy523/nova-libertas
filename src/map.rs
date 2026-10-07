@@ -13,6 +13,7 @@ pub struct GameMap {
     pub cell_size: f32,
 
     pub landforms: Vec<Landform>,
+    pub obstacle_entities: Vec<Entity>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -118,6 +119,7 @@ impl GameMap {
             height,
             cell_size,
             landforms,
+            obstacle_entities: Vec::new(),
         })
     }
     pub fn build_obstacle(&self) -> Obstacle {
@@ -150,6 +152,24 @@ impl GameMap {
             (self.width - 1) as f32 * self.cell_size,
             (self.height - 1) as f32 * self.cell_size,
         )
+    }
+
+    pub fn build_obstacle_entities(&mut self, commands: &mut Commands) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let landform = self.landforms[y * self.width + x];
+                if landform.blocked_mask & CELL_BLOCKED != 0 {
+                    let pos = Vec2::new(
+                        x as f32 * self.cell_size,
+                        y as f32 * self.cell_size,
+                    );
+                    let entity = commands.spawn((
+                        Transform::from_translation(Vec3::new(pos.x, 0.0, pos.y)),
+                    )).id();
+                    self.obstacle_entities.push(entity);
+                }
+            }
+        }
     }
 }
 

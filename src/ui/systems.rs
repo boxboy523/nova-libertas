@@ -45,6 +45,7 @@ pub fn register_ui_components(
     for component in [
         "resource_bar",
         "options_button",
+        "options_panel",
         "quickslot_bar",
         "side_panel",
         "build_panel",
