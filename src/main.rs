@@ -9,7 +9,7 @@ fn main() {
     let game_map = GameMap::from_tmx("assets/map.tmx", CELL_SIZE).expect("Failed to load map");
     let height_map = TerrainHeightMap::from_game_map(&game_map);
     let flow_grid = FlowGrid::new(&game_map);
-    let spatial_grid = SpatialGrid::new(&game_map);
+    let spatial_grid = SpatialGrid::new(&flow_grid);
     let thing_catalog = ThingCatalog::new();
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))

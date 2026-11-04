@@ -1,73 +1,122 @@
 #+title: nova_libertas
 
-* 개요
-=bevy_test=는 Rust와 Bevy 0.19로 작성된 RTS 실험 프로젝트다. Godot/GDExtension은 현재 코드 경로에 포함되지 않는다.
+* 개요와 확인 범위
+=nova_libertas=는 Rust 2024 edition과 Bevy 0.19로 작성된 RTS 실험 프로젝트다. 현재 코드 경로에 Godot/GDExtension은 없다. 이 문서는 현재 소스를 기준으로 정리했으며, 런타임 검증 결과와 정적 코드 확인을 구분한다.
 
-실행 시 =assets/map.tmx=의 첫 tile layer를 읽어 256×256 =GameMap=을 만들며, 시뮬레이션 cell 크기는 =CELL_SIZE= 20이다. TMX tile ID를 높이와 통행 가능 여부로 변환해 3D terrain mesh, flow field obstacle, spatial grid를 함께 구성한다. fixed update는 60 Hz다.
+주요 의존성은 =bevy_hui 0.7=, =bevy_heightmap 0.19=, =dodgy_2d=, =tiled=이며, 경로 탐색은 git revision =386d325=의 =chunk-flow-field=를 사용한다. 확인 기준 커밋은 =97f2839= (=migrate new pathfinding=)이다.
 
 * 실행 구조
-- =bevy_test/src/main.rs=: TMX 맵과 핵심 resource를 생성하고 Bevy plugin을 조립한다.
-- =bevy_test/src/lib.rs=: 모듈과 prelude를 공개하며, =setup=에서 테스트 유닛 36기를 생성한다.
-- =bevy_test/src/map.rs=: TMX를 =GameMap=으로 변환하고 =TerrainHeightMap= mesh, 높이 보간, mouse raycast를 제공한다.
-- =bevy_test/src/world3d/mod.rs=: 3D camera, terrain, directional light와 camera-facing billboard를 생성한다. 방향키/화면 가장자리로 camera를 이동하고 Q/E로 zoom한다.
-- =bevy_test/src/input.rs=: cursor ray와 terrain height map의 교점을 2D 지상 좌표로 변환해 =MouseState=에 기록한다.
-- =bevy_test/src/ui.rs=: 클릭/드래그 선택, 이동·공격 명령, selection box와 Bevy UI 기반 HP bar를 담당한다.
+- =src/main.rs=: =assets/map.tmx=를 읽고 =GameMap=, =TerrainHeightMap=, =FlowGrid=, =SpatialGrid=, =ThingCatalog=를 생성한다. Bevy 기본 plugin, Hui, 시각화, UI, 입력, 전투, 유닛, 이동, 3D world, 플레이어 plugin을 조립한다.
+- 현재 TMX는 256×256이며 시뮬레이션 cell 크기 =CELL_SIZE=는 20이다. TMX의 이미지 tile 크기 32와 별개다. fixed update는 60 Hz다.
+- =src/lib.rs::setup=: =PostStartup=에서 Gun/Cannon과 Player/Enemy를 섞어 테스트 유닛 36기를 생성한다. 초기 HP는 각 100이다.
+- =src/map.rs=: 첫 TMX layer가 tile layer인지 검사하고, tile ID를 높이 및 통행 mask로 변환한다. 빈 tile과 tile ID 0은 막힌 cell이며, 인접 높이 차가 1보다 크면 양쪽 edge를 막는다.
+- =GameMap::build_obstacle=은 cell/edge mask를 경로 탐색 라이브러리의 =Obstacle=로 변환한다. 같은 맵을 지형, 방향장, 공간 질의의 기반으로 사용한다.
 
 * 시뮬레이션
 ** 유닛과 공간 질의
-- =Position(Vec2)=가 지상 x/z 위치의 권위 상태다. =position_to_transform_system=이 terrain 높이를 더해 렌더링 =Transform=으로 변환한다.
+- =src/unit/component.rs::Position(Vec2)=가 지상 x/z 위치의 권위 상태다. =position_to_transform_system=이 terrain 높이를 더해 렌더링 =Transform=으로 변환한다.
 - =UnitStats=는 충돌 반경, 최대 속도, 가속도를 보유하고 =UnitBattleStats=는 사거리, 피해량, cooldown, 전달 방식, impact 방식을 보유한다.
-- =SpatialGrid=는 TMX의 막힌 cell과 높이 차가 큰 cell edge를 장애물로 사용한다. fixed tick마다 살아 있는 이동 객체를 다시 등록하며 원 충돌 및 원형/사각형 후보 조회를 제공한다.
-- =ThingCatalog=와 =SpriteCatalog=는 각 =ThingType=의 =assets/**/info.toml=을 읽어 gameplay stats와 visual 설정을 구성한다.
+- =SpatialGrid=는 막힌 cell과 높이 차가 큰 cell edge를 장애물로 사용한다. fixed tick마다 살아 있는 이동 객체를 다시 등록하며 원 충돌 및 원형/사각형 후보 조회를 제공한다.
+- =ThingCatalog=와 =SpriteCatalog=는 각 =ThingType=의 =assets/**/info.toml=에서 gameplay stats와 visual 설정을 읽는다.
 
-** 이동
-1. 우클릭 또는 A 키 입력이 선택 유닛에 =MoveOrderEvent=를 보낸다. A 키 명령은 =AutoAttack=을 활성화한다.
-2. 명령마다 =FlowField= entity 하나를 만들고 각 유닛의 =Moving.field=가 이를 직접 참조한다.
-3. =chunk-flow-field=가 =GameMap= obstacle에서 방향장을 만들고, 목표 근처에서는 목표를 향한 직선 방향을 사용한다.
-4. =dodgy_2d= local avoidance, 벽/경계 보정, 가감속을 거쳐 =Position=을 갱신한다.
-5. 도착하거나 같은 field를 완료한 유닛과 충돌하면 =DelayedStopTrigger=를 거쳐 =Stopped=로 전환한다. 참조하는 유닛이 없는 =FlowField=는 매 fixed tick 제거한다.
+** 이동과 방향장 수명
+1. 우클릭 또는 A 키가 선택 유닛에 =MoveOrderEvent=를 보낸다. A는 =AutoAttack=을 활성화하고, 일반 이동은 이를 제거한다. 두 경우 모두 기존 =Attack=을 제거한다.
+2. =src/movement/event.rs::move_order_trigger=는 =FlowGrid::gen_flow_field=를 호출하고, 명령당 =FlowFieldEntity= 하나를 생성한다. 명령에 포함된 유닛은 =Moving.field=로 같은 entity를 참조한다.
+3. =FlowGrid=는 =chunk_flow_field::map::Map=을 보유한다. 방향장 생성 옵션은 =wall_margin= 1.5, =wall_repulsion_strength= 0.4다.
+4. =flow_field_added_system=은 새 =FlowFieldEntity=의 방향장을 다시 생성한다. 따라서 현재 이동/공격 명령에서는 observer와 Added system이 각각 생성 작업을 한다.
+5. =sample_flow_field=는 =get_valid_field(&self.map)=로 필드를 얻고 주변 방향을 가중 보간한다. 같은 목표 cell에서는 목표 방향을 직접 반환한다. =flow_movement_system=도 =NEAR_TARGET_MARGIN= 안에서는 직선 방향을 사용하며, 샘플이 없으면 선호 방향을 0으로 만든다.
+6. =dodgy_2d= local avoidance, 벽/경계 보정, 정지 판정, 가감속을 거쳐 =Position=을 갱신한다. 도착하거나 같은 field를 완료한 유닛과 충돌하면 =DelayedStopTrigger=를 거쳐 =Stopped=로 전환한다.
+7. =remove_empty_orders_system=은 어떤 =Moving=도 참조하지 않는 방향장 entity를 제거한다.
 
-Movement plugin의 fixed systems는 하나의 =.chain()=으로 명시적으로 순서가 고정돼 있다. Unit plugin에서는 사망 처리 후 spatial grid를 갱신하며, Combat plugin에서는 추격/공격 판정, 자동 표적 탐색, 공격, projectile 이동 순서가 고정돼 있다. plugin 사이의 fixed-system 순서는 별도로 연결하지 않았다.
+=MovementPlugin=의 FixedUpdate 순서는 다음과 같이 chain되어 있다:
+=flow_field_added → update_flow_field → flow_movement → update_avoid_resp → avoid → delayed_stop → remove_empty_orders → smooth_wall_passing → stop_attacking_unit → stop_moving_unit → stopped_in_range → acceleration → apply_move= (각 이름의 =_system= 생략).
 
 ** 전투
-- 적 유닛을 좌클릭하면 선택 유닛에 =AttackOrderEvent=를 보내고, 목표를 추적하는 =FieldFollowTarget= flow field와 =Attack=을 부여한다.
-- 직접 공격은 =Moving + Attack= 상태를 사용한다. 목표가 사거리 안이면 =Attack.attacking=true=가 되고 공격 중에는 목표 방향을 바라보며 감속한다.
+- 적 유닛 좌클릭은 =AttackOrderEvent=를 보낸다. observer는 =Moving + Attack=을 부여하고 =AutoAttack=을 제거하며, =FieldFollowTarget=이 붙은 공유 방향장 entity를 생성한다.
+- 추격 목표의 위치가 바뀌면 =update_flow_field_system=이 =goal=을 갱신한다. 목표가 다른 grid cell로 이동했을 때만 방향장을 재생성한다.
+- 직접 공격은 목표가 사거리 안일 때 =Attack.attacking=true=로 전환하며, 공격 중에는 목표를 바라보고 감속한다.
 - =AutoAttack= 유닛은 현재 =Attack=이 없을 때 사거리 안의 가장 가까운 적을 찾는다. 자동 표적이 사거리 밖으로 나가면 =Attack=을 제거해 다시 탐색한다.
-- 공격 전달 방식은 즉시 또는 projectile이며, impact는 단일 대상 또는 범위 피해다. Cannon은 projectile+area, Gun은 instant+single 설정이다.
-- 피해로 HP가 0 이하가 되면 =Dead=를 붙이고 이동/공격/정지 상태를 제거한다. Unit plugin이 다음 fixed update 처리에서 entity를 despawn한다.
+- 공격 전달 방식은 즉시 또는 projectile이며 impact는 단일 대상 또는 범위 피해다. Cannon은 projectile+area, Gun은 instant+single 설정이다.
+- =ImpactEvent=는 =SpatialGrid::query_entities(center, radius, false)=로 대상 반경을 포함한 overlap 후보를 조회하고 같은 팀을 제외한다. 기존 문서의 중심점만 검사한다는 설명은 현재 코드와 다르다.
+- HP가 0 이하가 되면 =Dead=를 붙이고 이동/공격/정지 상태를 제거한다. Unit plugin의 사망 처리 system이 entity를 despawn한다.
+
+** 스케줄과 순서 제약
+- =UnitPlugin=: FixedUpdate에서 사망 처리 → spatial grid 갱신을 chain한다. Update에서 =Position=을 =Transform=으로 옮긴다.
+- =CombatPlugin=: FixedUpdate에서 추격/공격 판정 → 자동 표적 탐색 → 공격 → projectile 이동을 chain한다.
+- Movement, Combat, Unit 사이에는 명시적인 fixed-system dependency edge가 없다. plugin 등록 순서를 실행 순서 보장으로 해석하면 안 된다. 서로의 변경을 어느 tick에 관측하는지는 이 순서 제약과 deferred command 적용 시점의 영향을 받는다.
 
 * 렌더링
-- 유닛과 벽은 3D world에 quad mesh로 놓고 =Billboard= system이 camera를 향하게 한다.
+- =src/world3d/mod.rs=는 3D camera, terrain, directional light를 생성하고 camera-facing =Billboard=를 갱신한다. 유닛과 벽은 3D quad mesh로 표시한다.
 - =SpriteCatalog=는 단일 이미지 또는 stand/move/attack sprite sheet를 읽는다. 8방향을 5개 row와 좌우 flip으로 매핑한다.
-- =TeamColorMaterial=은 =assets/shaders/team_color.wgsl=에서 녹색 계열 key color를 팀 색으로 치환한다.
-- 유닛 animation은 =Moving=/=Stopped=/=Attack.attacking= 변화에 따라 전환된다.
-- HP bar는 별도 Bevy UI entity이며 owner의 3D 위치를 매 update마다 viewport 좌표로 투영한다. owner 제거 시 =HpBarRef= remove observer가 bar도 제거한다.
-- =DebugPlugin=은 유닛 충돌 원, 선택 원, mouse terrain hit 위치를 gizmo로 표시한다.
+- =TeamColorMaterial=과 =assets/shaders/team_color.wgsl=이 녹색 계열 key color를 팀 색으로 치환한다.
+- 유닛 animation은 =Moving=/=Stopped=/=Attack.attacking= 상태 변화에 따라 전환한다. 제거된 =Attack=을 감지하지 못하는 등 전환 누락 경로는 =bug.org= 참조.
+- HP bar는 별도 Bevy UI entity다. owner의 3D 위치를 Update마다 viewport로 투영하고 HP에 따라 fill을 갱신한다. =HpBarRef= remove observer가 bar도 제거한다.
+- =DebugPlugin=은 충돌 원, 선택 원, mouse terrain hit를 gizmo로 표시한다.
 
-* 입력
-- 좌클릭: Player 유닛 단일 선택. Enemy 유닛 클릭 시 현재 선택 유닛에 직접 공격 명령.
-- 좌클릭 드래그: 화면 사각형 안의 Player 유닛 선택.
-- 우클릭: 선택 유닛 이동. 기존 =AutoAttack=과 =Attack= 제거.
-- A: mouse 위치로 자동공격 이동 명령.
-- 방향키 또는 화면 가장자리: camera 이동.
-- Q/E: camera zoom in/out.
+* 플레이어 상태와 구현 경계
+- =src/player/mod.rs::PlayerState=는 9칸 =unit_loadout=과 =resources=를 보유한다. =PlayerPlugin=이 resource를 초기화하고 Startup에서 기본값을 설정한다.
+- 초기 편성은 첫 두 칸 Gun/Cannon, 나머지는 빈 칸이다. 초기 자원은 =ore= 100, =oil= 50, =human= 10이다.
+- 자원 UI의 ID 대응은 =ore → mineral_count=, =oil → gas_count=, =human → power_count=다.
+- =src/building.rs::Building=은 빈 구조체다. 건설·연구·유닛 패널이나 아이콘 asset이 존재한다는 사실을 해당 gameplay 기능이 완성됐다는 뜻으로 해석하지 않는다.
 
-* 현재 확인된 위험
-- =GameMap::from_tmx=는 첫 layer가 tile layer라고 가정하며, =width - 1=과 =height - 1= 반복 때문에 0 크기 맵에서는 underflow가 난다. tile ID와 높이의 대응도 코드에 고정돼 있다.
-- =FlowGrid::world_to_grid=는 음수 좌표를 =usize=로 변환한 뒤 범위에 clamp하므로 음수 위치를 명시적으로 거부하지 않는다. =gen_flow_field=의 목표 좌표도 범위 검증 없이 변환한다.
-- terrain mesh와 raycast 범위는 =(width - 1) * cell_size=까지지만 =SpatialGrid.map_size=는 =width * cell_size=다. 맵의 마지막 cell 부근에서 렌더/입력 범위와 시뮬레이션 범위가 한 cell만큼 다르다.
-- =ImpactEvent=의 범위 피해 조회는 대상 중심까지의 거리만 검사한다(=by_center=true=). 이는 entity 반경을 포함하는 overlap 판정이 아니라 중심점 기준 범위다.
-- =ThingType::get_info=와 sprite catalog 초기화는 asset 파일 누락 및 TOML 오류에 =expect=/=panic!=을 사용한다.
-- =assets/**/info.toml=의 =unit_stats.max_hp=는 현재 =UnitStats=에 없는 필드이고 spawn HP는 =SpawnUnitEvent.hp=에서 별도로 받는다. Serde가 unknown field를 거부하지 않아 설정의 =max_hp=는 gameplay에 사용되지 않는다.
-- fixed system 순서는 각 plugin 내부에서만 chain되어 있다. Combat, Movement, Unit plugin 사이에는 dependency edge가 없으므로 서로의 결과가 한 fixed tick 뒤 반영될 수 있다.
+* HTML UI와 이벤트 흐름
+** 템플릿 조립과 entity index
+- =src/ui/mod.rs::UIPlugin=은 Startup에서 선택 상자 생성 → HTML component 등록 → 메인 UI 생성을 chain한다.
+- =src/ui/systems.rs::register_ui_components=가 =assets/ui/src/components/*.html=을 Hui component로 등록하고, =spawn_main_ui=가 =assets/ui/src/main.html=을 =HtmlNode=로 로드한다.
+- 메인 템플릿은 resource bar, options button, quickslot bar, side/build/unit/research panel, bottom HUD, detail panel, options modal을 조합한다. =unit_selection=과 =category_tabs=도 재사용 component로 등록된다.
+- =UiId= Add observer가 =UiEntityIndex.entities=에 ID→Entity를 등록하고 클릭 observer, 초기 transform/z-index/visibility, scroll 상태 등을 설정한다. Remove observer는 index의 entity가 일치할 때만 항목을 지운다.
+- =unit_1=부터 =unit_9=까지는 편성 정보를 읽어 아이콘과 =UnitSlot=을 붙인다. 클릭은 생산 명령이 아니라 해당 편성 타입의 Player 유닛 전체 선택이다.
 
-* 검증
-- 2026-08-28 현재 =bevy_test=에서 =cargo check --locked=가 성공한다.
-- warning 2개가 남아 있다: =world3d/mod.rs=의 미사용 =GameMap= import, =unit/spatial_grid.rs=의 미사용 =circle_line_overlap= 함수.
-- 자동 테스트는 현재 소스 트리에서 확인되지 않았다.
+** 패널 상태와 애니메이션
+- =UiState=는 옵션 열림, 마지막 선택 슬롯, 각 패널의 =PanelState=를 보유한다. =PanelState=는 Closed/Opening/Open/Closing이다.
+- =BottomPanel=이 Build/Unit/Research와 UI ID 및 상태 필드를 연결한다. =ToggleBottomPanelEvent=는 열린 다른 하단 패널을 닫으면서 요청 패널을 열며, 하단 패널 전환 중에는 추가 toggle을 무시한다.
+- 패널 observer가 0.2초 =UiTween=을 붙이면 =animate_ui_tween=이 =UiTransform=을 보간한다. 완료 후 =TweenFinishedEvent=를 보내 상태를 Open/Closed로 확정하고 tween을 제거한다.
+- 하단 패널은 기본 global z-index 200, 새로 여는 패널은 201이다. detail panel은 210이며 하단 패널 열림/닫힘 요청에 연동한다. detail 닫기 버튼은 열린 하단 패널을 toggle한다.
+- options modal은 z-index 300이며 =SetOptionsPanelOpenEvent=가 =Visibility=와 =UiState.options_open=을 갱신한다.
 
-* 미해결 질문
-- 목표 유닛 수와 목표 frame/fixed tick 성능 기준은 미확인이다.
-- 하나의 이동 명령마다 flow field를 유지할지 동일 목적지 또는 분대 단위로 공유할지는 미확인이다.
-- 어택땅의 탐색 반경, 표적 우선순위, 추격 거리, 목적지 도착 후 상태의 최종 규칙은 미확인이다.
-- TMX의 tile ID와 높이/통행 규칙을 asset metadata로 옮길지는 미확인이다.
+** 데이터 표시와 수명
+- =minimap_system=과 =update_resource_text=는 =HuiSystems::Build= 이후 실행한다. HTML entity가 준비되기 전에는 필요한 ID가 없을 수 있다.
+- 자원 텍스트는 =PlayerState= 또는 =UiEntityIndex=가 변경되었을 때 갱신한다.
+- 미니맵은 =Position=이 변경되었거나 =MinimapMarker=가 없는 유닛을 처리하고, =GameMap::get_size= 기준 위치를 패널의 5~95% 영역에 매핑한다. 마커는 별도 UI entity이고 owner는 =MinimapMarker.target=으로 참조한다.
+- 현재 =MinimapMarker= 제거 시 UI 마커를 정리하는 observer는 없다. 유닛 despawn 후 마커 잔류 가능성은 런타임 확인이 필요하다.
+
+* 입력과 UI capture
+- =InputPlugin=의 Update chain: =update_ui_input_capture → mouse_input → toggle_side_panel_input → select_unit_slot_input → scroll_panel_input=. UI 선택/명령/HP bar chain은 =mouse_input= 이후 실행한다.
+- =mouse_input=은 cursor ray와 terrain의 교점으로 지상 좌표 및 버튼 상태를 갱신한다. cursor/레이/terrain 교점이 없으면 갱신 전 반환한다.
+- =UiInputCapture=는 주요 UI node의 가시성과 pointer 포함 여부를 검사한다. options가 열려 있으면 위치와 무관하게 =pointer_over_ui=true=다. UI에서 시작한 좌/우 버튼 gesture의 capture는 release 프레임까지 유지한다.
+- =selection_system=은 UI 위 좌클릭 시작을 막고 UI에서 시작된 드래그의 갱신/완료를 제외한다. 다만 =move_selected_units=는 capture를 읽지 않아 우클릭 이동과 A 명령까지 차단되는 구조는 아니다.
+- 스크롤은 build/unit/research icon viewport 위에서 =ScrollPosition=을 clamp해 갱신하며 =mouse_wheel= capture를 기록한다. 카메라는 =scroll_panel_input= 이후 실행해 capture된 휠을 zoom에 사용하지 않는다.
+
+** 현재 조작
+- 좌클릭: Player 유닛 단일 선택, Enemy 유닛이면 현재 선택 유닛에 직접 공격 명령.
+- 빈 곳 좌클릭 드래그: 화면 사각형 안의 Player 유닛 선택. 네 모서리를 terrain으로 변환해 공간 후보를 구한 뒤 viewport 투영으로 최종 필터한다.
+- 우클릭: 선택 유닛 이동. A: mouse 위치로 자동공격 이동.
+- 1~9 또는 편성 슬롯 클릭: 해당 타입 Player 유닛 전체 선택. Backquote(=/~= 물리 키) 또는 전체 선택 버튼: Player 전체 선택.
+- Tab: 마지막 선택 슬롯 다음의 비어 있지 않은 슬롯을 선택한다. 뒤에 슬롯이 없으면 전체 선택으로 돌아간다.
+- 왼쪽 Shift: side panel toggle. Q/W/E: 각각 Build/Unit/Research panel toggle. Q/E는 현재 zoom 키가 아니다.
+- 방향키 또는 화면 가장자리: 카메라 이동. 휠: zoom, radius 범위 200~2000.
+
+* 현재 확인된 위험과 추가 검증 대상
+- =GameMap::from_tmx=는 첫 layer가 tile layer가 아니면 오류를 반환한다. 다만 =width - 1= 및 =height - 1= 연산이 있어 0 크기 맵에 안전하지 않다. tile ID와 높이/통행 규칙도 코드에 고정돼 있다.
+- =world_to_grid=는 음수 좌표를 명시적으로 거부하지 않고 float→usize 변환 후 상한 clamp한다. =gen_flow_field=도 목표 범위를 호출 전에 검증하지 않는다.
+- 이동/공격 명령 observer는 방향장 생성 오류에 panic한다. Added/추격 갱신 system은 오류 시 =FlowField::empty=로 대체하며, fallback의 =Pos=는 cell 크기로 나누지 않은 월드 좌표다. 이 오류 경로들은 서로 일관되지 않다.
+- 방향 샘플이 없을 때 선호 방향만 0으로 바꾸고 =Moving=은 유지한다. 명령 단계에서 panic하지 않은 경우에도 이동 모션만 유지될 가능성이 있다. =bug.org=의 이전 분석은 현재 명령 생성 경로와 함께 재검토해야 한다.
+- terrain mesh/raycast 및 =GameMap::get_size=는 =(width - 1) * cell_size= 기준이지만 =SpatialGrid.map_size=는 =width * cell_size=다. 마지막 cell 부근의 렌더/입력/시뮬레이션 범위가 다르다.
+- 적 클릭 처리에서 선택 유닛 수만큼 동일한 전체 집합의 =AttackOrderEvent=를 보낸다. 다중 선택 시 중복 명령과 방향장 생성이 발생할 수 있다.
+- cursor가 창 밖에 있거나 terrain ray가 빗나가면 입력이 갱신되지 않는다. 맵 밖 release 누락 및 네 모서리 변환 실패에 따른 드래그 선택 중단은 =bug.org= 참조.
+- =ThingType::get_info=와 sprite catalog는 asset 누락/TOML 오류에 expect/panic을 사용한다. =unit_stats.max_hp= 설정은 현재 =UnitStats= 필드가 아니며 spawn HP는 =SpawnUnitEvent.hp=에서 별도로 받는다.
+- 공격 애니메이션 잔류, 확대 시 유닛 바닥의 검은 영역, cursor confinement 미구현 등 기존 분석은 =bug.org=에 있다. 이번 문서 갱신에서 런타임 재현하거나 수정하지 않았다.
+
+* 개발 환경, 테스트와 CI
+- =flake.nix=는 stable Rust, rust-src, rust-analyzer 및 Bevy용 시스템 라이브러리/Vulkan 환경을 제공한다. =.envrc=는 =use flake=다. =VK_DRIVER_FILES=는 Radeon ICD 경로로 고정되어 있어 다른 GPU 환경에서는 검토가 필요하다.
+- 개발 환경에서 저장소 루트를 기준으로 =cargo check --locked=, =cargo test --locked --test ui_template_parse_check=, =cargo run --locked=를 사용할 수 있다. asset 경로는 저장소 루트 기준이다.
+- =tests/ui_template_parse_check.rs::split_ui_templates_parse=는 메인 UI와 components 디렉터리 파일을 NoopAssetLoader로 파싱하고 각각 root node가 하나인지 검사한다. 실제 asset 로딩, component 조합 후 레이아웃, observer, 시뮬레이션이나 GPU 렌더링을 검증하지는 않는다.
+- =.github/workflows/windows.yml=은 push/PR/수동 실행 시 Windows x64 release를 =--locked=로 빌드하고 exe와 assets를 ZIP artifact로 업로드한다. 현재 workflow에는 테스트 실행 단계가 없다.
+- 이번 확인에서 =cargo check --locked=는 Cargo 프로세스를 찾지 못하는 도구 환경 오류로 실행되지 않았다. 테스트와 게임도 실행하지 않았다. 현재 빌드 성공 여부나 warning 개수를 확정하지 않는다. 이전 문서의 성공/warning 기록은 현재 결과로 간주하지 않는다.
+
+* 미해결 설계 질문
+- 목표 유닛 수와 frame/fixed tick 성능 기준.
+- 명령별 방향장 생성 유지 여부, 동일 목적지/분대 단위 공유 및 중복 생성 제거 정책.
+- 자동공격 탐색 반경, 표적 우선순위, 추격 거리, 목적지 도착 후 상태의 최종 규칙.
+- TMX tile ID와 높이/통행 규칙을 asset metadata로 이동할지 여부.
+- 건설/연구/생산 및 자원 수급의 gameplay 규칙과 현재 HUD를 연결할 범위.
