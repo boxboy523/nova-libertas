@@ -1,6 +1,6 @@
 use crate::{
     combat::component::{Attack, AutoAttack, UnitHp},
-    movement::component::{DelayedStopTrigger, FieldFollowTarget, FlowField, Moving, Stopped},
+    movement::{component::{DelayedStopTrigger, FieldFollowTarget, FlowFieldEntity, Moving, Stopped}, flow_grid::FlowGrid},
     unit::{component::{Dead, Position, Team}, spatial_grid::SpatialGrid},
 };
 use bevy::prelude::*;
@@ -15,6 +15,7 @@ pub struct AttackOrderEvent {
 pub fn attack_order_trigger(
     event: On<AttackOrderEvent>,
     mut commands: Commands,
+    mut flow_grid: ResMut<FlowGrid>,
     query: Query<&Position>,
 ) {
     println!("AttackOrderEvent received for target: {:?}", event.target);
@@ -23,10 +24,13 @@ pub fn attack_order_trigger(
     } else {
         Vec2::ZERO // 대상이 존재하지 않으면 기본값으로 Vector2::ZERO 사용
     };
+    let field = flow_grid.gen_flow_field(last_pos).unwrap_or_else(|err| {
+        panic!("Failed to generate flow field: {}", err);
+    });
     let new_field = commands
         .spawn((
-            FlowField {
-                field: Vec::new(),
+            FlowFieldEntity {
+                field,
                 goal: last_pos,
             },
             FieldFollowTarget(event.target),

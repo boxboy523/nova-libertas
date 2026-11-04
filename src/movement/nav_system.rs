@@ -1,22 +1,23 @@
 use crate::{
     constants::NEAR_TARGET_MARGIN,
-    movement::{component::{FieldFollowTarget, FlowField, Moving, UnitMovement}, flow_grid::FlowGrid},
+    movement::{component::{FieldFollowTarget, FlowFieldEntity, Moving, UnitMovement}, flow_grid::FlowGrid},
     unit::component::Position,
 };
 use bevy::prelude::*;
+use chunk_flow_field::types::{FlowField, FlowFieldOptions};
 use std::collections::HashSet;
 
 // 명령 처리 시스템: 명령을 받은 유닛들을 FlowField를 따라 방향을 업데이트하는 시스템
 pub fn flow_movement_system(
     mut query: Query<(&Position, &mut UnitMovement, &mut Moving)>,
-    query_fields: Query<&FlowField>,
+    mut query_fields: Query<&mut FlowFieldEntity>,
     flow_grid: Res<FlowGrid>,
 ) {
     let near_target_margin_squared = NEAR_TARGET_MARGIN * NEAR_TARGET_MARGIN;
     query
         .iter_mut()
         .for_each(|(position, mut movement, mut moving)| {
-            let flow_field = if let Ok(field) = query_fields.get(moving.field) {
+            let mut flow_field = if let Ok(field) = query_fields.get_mut(moving.field) {
                 field
             } else {
                 return; // FlowField를 찾을 수 없으면 건너뜀
@@ -26,7 +27,7 @@ pub fn flow_movement_system(
                 // 목표 지점 근처에 있으면 직선 이동
                 (flow_field.goal - **position).normalize_or_zero()
             } else if let Some(dir) = // 플로우 필드에서 방향 벡터를 샘플링
-                flow_grid.sample_flow_field(flow_field, **position)
+                flow_grid.sample_flow_field(&mut flow_field, **position)
             {
                 dir
             } else {
@@ -37,7 +38,7 @@ pub fn flow_movement_system(
 
 pub fn remove_empty_orders_system(
     mut commands: Commands,
-    query: Query<Entity, With<FlowField>>,
+    query: Query<Entity, With<FlowFieldEntity>>,
     query_moving: Query<&Moving>,
 ) {
     let field_using = query_moving
@@ -52,7 +53,7 @@ pub fn remove_empty_orders_system(
 }
 
 pub fn update_flow_field_system(
-    mut query_target: Query<(&mut FlowField, &FieldFollowTarget)>,
+    mut query_target: Query<(&mut FlowFieldEntity, &FieldFollowTarget)>,
     query_position: Query<&Position>,
     grid: Res<FlowGrid>,
 ) {
@@ -67,7 +68,11 @@ pub fn update_flow_field_system(
                     if last_grid_pos != new_grid_pos {
                         flow_field.field = grid
                             .gen_flow_field(flow_field.goal)
-                            .unwrap_or_else(|_| vec![None; grid.width * grid.height]);
+                            .unwrap_or_else(|_| FlowField::empty(chunk_flow_field::types::Pos {
+                                x: flow_field.goal.x.floor() as usize,
+                                y: flow_field.goal.y.floor() as usize
+                            },
+                                &FlowFieldOptions::default()));
                     }
                 }
             }
@@ -75,12 +80,16 @@ pub fn update_flow_field_system(
 }
 
 pub fn flow_field_added_system(
-    mut query: Query<&mut FlowField, Added<FlowField>>,
+    mut query: Query<&mut FlowFieldEntity, Added<FlowFieldEntity>>,
     grid: Res<FlowGrid>,
 ) {
     query.iter_mut().for_each(|mut flow_field| {
         flow_field.field = grid
             .gen_flow_field(flow_field.goal)
-            .unwrap_or_else(|_| vec![None; grid.width * grid.height]);
+            .unwrap_or_else(|_| FlowField::empty(chunk_flow_field::types::Pos {
+                x: flow_field.goal.x.floor() as usize,
+                y: flow_field.goal.y.floor() as usize
+            },
+                &FlowFieldOptions::default()));
     });
 }

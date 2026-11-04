@@ -1,6 +1,8 @@
-use crate::{map::GameMap, movement::component::FlowField};
+use std::fmt::Debug;
+
+use crate::{map::GameMap, movement::component::FlowFieldEntity};
 use bevy::prelude::*;
-use chunk_flow_field::{map::Map, types::FlowFieldOptions};
+use chunk_flow_field::{map::Map, types::{FlowField, FlowFieldOptions}};
 
 #[derive(Resource, Debug)]
 pub struct FlowGrid {
@@ -35,7 +37,7 @@ impl FlowGrid {
     }
 
     // 주어진 월드 좌표에서 플로우 필드 벡터를 샘플링하는 함수 (양선형 보간)
-    pub fn sample_flow_field(&self, flow_field: &FlowField, position: Vec2) -> Option<Vec2> {
+    pub fn sample_flow_field(&self, flow_field: &mut FlowFieldEntity, position: Vec2) -> Option<Vec2> {
         let gx = position.x / self.cell_size;
         let gy = position.y / self.cell_size;
         let grid_x = gx.floor() as usize;
@@ -62,29 +64,28 @@ impl FlowGrid {
         .max(0) as usize;
         let tx = if tx < 0.5 { tx + 0.5 } else { tx - 0.5 }.max(0.0);
         let ty = if ty < 0.5 { ty + 0.5 } else { ty - 0.5 }.max(0.0);
-        let v00 = flow_field
-            .field
-            .get(base_y * self.width + base_x)
-            .and_then(|v| v.to_owned());
+        let field = flow_field.field.get_valid_field(&self.map).ok()?;
+        let v00 =
+            field.get(base_y * self.width + base_x).and_then(|v| v.to_owned()).and_then(|v| Some(Vec2::new(v.0, v.1)));
         let v10 = if (base_x + 1) >= self.width {
             None
         } else {
-            flow_field
-                .field
+            field
                 .get(base_y * self.width + (base_x + 1))
                 .and_then(|v| v.to_owned())
+                .and_then(|v| Some(Vec2::new(v.0, v.1)))
         };
-        let v01 = flow_field
-            .field
+        let v01 = field
             .get((base_y + 1) * self.width + base_x)
-            .and_then(|v| v.to_owned());
+            .and_then(|v| v.to_owned())
+            .and_then(|v| Some(Vec2::new(v.0, v.1)));
         let v11 = if (base_x + 1) >= self.width {
             None
         } else {
-            flow_field
-                .field
+            field
                 .get((base_y + 1) * self.width + (base_x + 1))
                 .and_then(|v| v.to_owned())
+                .and_then(|v| Some(Vec2::new(v.0, v.1)))
         };
         let mut total = Vec2::ZERO;
         let mut weight = 0.0;
@@ -124,15 +125,7 @@ impl FlowGrid {
         Some(total / weight)
     }
 
-    pub fn gen_flow_field(&self, target: Vec2) -> anyhow::Result<Vec<Option<Vec2>>> {
-        let eps = 0.001; // 작은 값으로 0 나누기 방지
-        let to_vec2 = |(x, y)| {
-            if x < eps && x > -eps && y < eps && y > -eps {
-                Vec2::ZERO
-            } else {
-                Vec2::new(x as f32, y as f32)
-            }
-        };
+    pub fn gen_flow_field(&self, target: Vec2) -> anyhow::Result<FlowField> {
         let goal = chunk_flow_field::types::Pos {
             x: (target.x / self.cell_size).floor() as usize,
             y: (target.y / self.cell_size).floor() as usize,
@@ -142,7 +135,6 @@ impl FlowGrid {
             wall_repulsion_strength: 0.4,
             ..Default::default()
         };
-        let field = self.map.build_flow_field(goal, &option)?;
-        Ok(field.flow.into_iter().map(|opt| opt.map(to_vec2)).collect())
+        FlowField::new(goal, &option, &self.map)
     }
 }

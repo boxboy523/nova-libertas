@@ -2,6 +2,8 @@ use bevy::prelude::*;
 
 use crate::constants::STOP_RESP;
 
+use chunk_flow_field::types::FlowField;
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct UnitMovement {
     pub speed: f32,           // 유닛의 현재 이동 속도
@@ -42,10 +44,10 @@ pub struct DelayedStopTrigger {
     pub timer: f32,
 }
 
-#[derive(Component, Debug, Default)]
-pub struct FlowField {
+#[derive(Component, Debug)]
+pub struct FlowFieldEntity{
+    pub field: FlowField,
     pub goal: Vec2,
-    pub field: Vec<Option<Vec2>>,
 }
 
 #[derive(Component, Debug)]

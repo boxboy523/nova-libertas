@@ -1,5 +1,6 @@
-use crate::{combat::component::{Attack, AutoAttack}, movement::{component::{FlowField, Moving}, set_moving}};
+use crate::{combat::component::{Attack, AutoAttack}, movement::{component::{FlowFieldEntity, Moving}, flow_grid::FlowGrid, set_moving}};
 use bevy::prelude::*;
+use chunk_flow_field::types::FlowField;
 use std::collections::HashSet;
 
 #[derive(Event)]
@@ -9,14 +10,17 @@ pub struct MoveOrderEvent {
     pub auto_attack: bool,      // 이동 중 자동 공격 여부
 }
 
-pub fn move_order_trigger(event: On<MoveOrderEvent>, mut commands: Commands) {
+pub fn move_order_trigger(event: On<MoveOrderEvent>, flow_grid: ResMut<FlowGrid>, mut commands: Commands) {
     println!(
         "MoveOrderEvent received for target position: {:?}, auto_attack: {}",
         event.target_position, event.auto_attack
     );
+    let field = flow_grid.gen_flow_field(event.target_position).unwrap_or_else(|err| {
+        panic!("Failed to generate flow field: {}", err);
+    });
     let new_field = commands
-        .spawn((FlowField {
-            field: Vec::new(),
+        .spawn((FlowFieldEntity {
+            field,
             goal: event.target_position,
         },))
         .id();

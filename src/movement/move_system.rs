@@ -1,7 +1,7 @@
 use crate::{
     combat::component::{Attack, AutoAttack},
     constants::{ATTACK_RESP, MOVE_RESP, OBSTACLE_MARGIN, ORDER_MARGIN, RETURN_TO_STOP_MARGIN, SEARCH_RADIUS, STOP_COL_MARGIN, STOP_DELAY, STOP_RENEW_DELAY, STOP_RESP, TIME_HORIZON},
-    movement::{component::{DelayedStopTrigger, FlowField, Moving, Stopped, UnitMovement}, set_stopped},
+    movement::{component::{DelayedStopTrigger, FlowFieldEntity, Moving, Stopped, UnitMovement}, set_stopped},
     unit::{component::{Position, UnitStats}, spatial_grid::{CollisionResult, SpatialGrid}},
 };
 use bevy::ecs::entity::Entities;
@@ -93,7 +93,7 @@ pub fn stop_moving_unit_system(
         (Without<DelayedStopTrigger>, Without<Attack>),
     >,
     query_stopped: Query<(Entity, &Stopped)>,
-    query_fields: Query<&FlowField>,
+    query_fields: Query<&FlowFieldEntity>,
     spatial_grid: Res<SpatialGrid>,
 ) {
     let mut stopped_units_map: HashMap<Entity, Vec<Option<Entity>>> = HashMap::new();

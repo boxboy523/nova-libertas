@@ -10,6 +10,7 @@ pub mod unit;
 pub mod visual;
 pub mod world3d;
 pub mod player;
+pub mod building;
 
 pub fn load_map_from_csv(path: &str) -> (usize, usize, Vec<bool>) {
     let content = std::fs::read_to_string(path).unwrap();
