@@ -1,0 +1,6 @@
+t_type = "SupplyStorage"
+
+[sprite_info]
+type = "simple"
+file = "supplyStorage.png"
+size = [512.0, 512.0]

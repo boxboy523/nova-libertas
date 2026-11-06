@@ -11,6 +11,7 @@ pub enum ThingType {
     AttackerCannon,
     Wall,
     ProjWinged,
+    SupplyStorage,
 }
 
 impl ThingType {
@@ -24,6 +25,7 @@ impl ThingType {
             ThingType::AttackerCannon => PathBuf::from("attackerCannon"),
             ThingType::Wall => PathBuf::from("wall"),
             ThingType::ProjWinged => PathBuf::from("projectiles/projWinged"),
+            ThingType::SupplyStorage => PathBuf::from("buildings/supplyStorage"),
         }
     }
 
@@ -69,4 +71,31 @@ pub struct ThingInfo {
     pub t_type: ThingType,
     pub unit_stats: Option<UnitStats>,
     pub battle_stats: Option<UnitBattleStats>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::visual::info::{SpriteConfig, SpriteInfoKind};
+
+    #[test]
+    fn supply_storage_has_gameplay_and_sprite_configuration() {
+        let thing_type = ThingType::SupplyStorage;
+        let info = thing_type.get_info();
+        assert_eq!(info.t_type, thing_type);
+        assert!(!thing_type.is_unit());
+        assert!(info.unit_stats.is_none());
+        assert!(info.battle_stats.is_none());
+
+        let text = std::fs::read_to_string(thing_type.get_path().join("info.toml")).unwrap();
+        let config: SpriteConfig = toml::from_str(&text).unwrap();
+        let SpriteInfoKind::Simple { file } = config.sprite_info.kind else {
+            panic!("SupplyStorage must use a simple sprite");
+        };
+        assert_eq!(
+            thing_type.get_path().join(file).canonicalize().unwrap(),
+            PathBuf::from("assets/buildings/supplyStorage.png").canonicalize().unwrap(),
+        );
+        assert_eq!(config.sprite_info.size, Vec2::splat(512.0));
+    }
 }

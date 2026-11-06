@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_hui::HuiPlugin;
 use nova_libertas::{
+    building::BuildingPlugin,
     combat::CombatPlugin, constants::CELL_SIZE, debug::DebugPlugin, input::{InputPlugin, MouseState}, map::{GameMap, TerrainHeightMap}, movement::{MovementPlugin, flow_grid::FlowGrid}, player::PlayerPlugin, thing::ThingCatalog, ui::UIPlugin, unit::{UnitPlugin, spatial_grid::SpatialGrid}, visual::{SpritePlugin, team_color::TeamColorMaterial}, world3d::World3DPlugin
 };
 
@@ -31,6 +32,7 @@ fn main() {
         .add_plugins(MovementPlugin)
         .add_plugins(World3DPlugin)
         .add_plugins(PlayerPlugin)
+        .add_plugins(BuildingPlugin)
         .add_systems(PostStartup, nova_libertas::setup)
         .run();
 }
