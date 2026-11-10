@@ -1,6 +1,6 @@
 t_type = "Wall"
 
 [sprite_info]
-size = [40.0, 40.0]
+scale = 0.15
 type = "simple"
 file = "brick_wall.jpg"

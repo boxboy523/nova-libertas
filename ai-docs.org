@@ -114,6 +114,22 @@
 - =.github/workflows/windows.yml=은 push/PR/수동 실행 시 Windows x64 release를 =--locked=로 빌드하고 exe와 assets를 ZIP artifact로 업로드한다. 현재 workflow에는 테스트 실행 단계가 없다.
 - 이번 확인에서 =cargo check --locked=는 Cargo 프로세스를 찾지 못하는 도구 환경 오류로 실행되지 않았다. 테스트와 게임도 실행하지 않았다. 현재 빌드 성공 여부나 warning 개수를 확정하지 않는다. 이전 문서의 성공/warning 기록은 현재 결과로 간주하지 않는다.
 
+** 에이전트와 사용자 Cargo 빌드 캐시 분리
+- 에이전트의 모든 컴파일/검사 명령은 =CARGO_TARGET_DIR=target/pi=를 명시한다. 세션이 바뀌어도 유지해야 하는 실행 규칙은 =AGENTS.md=의 Cargo build isolation 절에 있다.
+- 확인된 원인: 사용자 빌드의 dependency 경로는 =/home/junyeong/.cargo/registry/src/...=이고, 에이전트 sandbox의 HOME은 =/tmp/pi-home=이므로 dependency 경로는 =/tmp/pi-home/.cargo/registry/src/...=다. 서로 다른 소스 경로로 같은 저장소의 기본 =target/=을 공유하면 Cargo 캐시를 번갈아 무효화한다.
+- 근거: 기존 =target/debug/deps/bevy-*.d=에 사용자 HOME의 소스 경로가 기록돼 있었고, 에이전트 환경의 fingerprint 로그에서 Bevy, anyhow, libc 등 다수 dependency에 =dirty: PathToSourceChanged=가 확인됐다. 프로젝트 crate 단위 재컴파일이나 단순 check/test 전환만의 문제가 아니다.
+- 에이전트 실행 예시:
+
+#+begin_src sh
+CARGO_TARGET_DIR=target/pi nix develop --command cargo check --locked --tests
+CARGO_TARGET_DIR=target/pi nix develop --command cargo test --locked
+CARGO_TARGET_DIR=target/pi nix develop --command cargo run --locked
+#+end_src
+
+- 사용자는 기존 기본 =target/=을 그대로 사용한다. 에이전트 결과는 =target/pi/debug= 또는 =target/pi/release=로 격리되며, 최초 격리 빌드에서는 dependency를 한 번 새로 컴파일할 수 있다.
+- 사용자 전용 캐시를 복구하는 재빌드가 한 번 필요할 수 있지만 =cargo clean=은 해결책으로 필요하지 않다. 에이전트는 기본 =target/debug= 및 =target/release=를 빌드/정리하지 않고, 사용자 global Cargo 설정도 변경하지 않는다.
+- 재발 조사 시 동일한 격리 설정에 =CARGO_LOG=cargo::core::compiler::fingerprint=info= 및 =-vv=를 추가해 실제 dirty 사유를 확인한다. 단순 로그 확보를 위해 기본 =target/=으로 빌드하지 않는다.
+
 * 미해결 설계 질문
 - 목표 유닛 수와 frame/fixed tick 성능 기준.
 - 명령별 방향장 생성 유지 여부, 동일 목적지/분대 단위 공유 및 중복 생성 제거 정책.

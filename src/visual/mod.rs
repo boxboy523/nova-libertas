@@ -12,6 +12,8 @@ pub mod team_color;
 pub struct UnitVisual {
     pub kind: UnitVisualKind,
     pub size: Vec2,
+    /// Render-only translation in world axes; never changes gameplay position.
+    pub world_offset: Vec3,
     pub anchor: Option<VisualAnchor>,
     pub roll_offset: f32,
 }

@@ -2,6 +2,7 @@ use crate::{
     map::TerrainHeightMap,
     movement::component::UnitMovement,
     unit::{component::{Dead, Position, UnitStats}, event::SpawnWallEvent, spatial_grid::SpatialGrid},
+    world3d::Billboard,
 };
 use bevy::prelude::*;
 
@@ -33,16 +34,17 @@ pub fn startup_spawn_wall(mut commands: Commands, spatial_grid: Res<SpatialGrid>
 }
 
 pub fn position_to_transform_system(
-    mut query: Query<(&Position, &UnitStats, &mut Transform)>,
+    mut query: Query<(&Position, &UnitStats, Option<&Billboard>, &mut Transform)>,
     height_map: Res<TerrainHeightMap>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
     let camera_up = camera.up().as_vec3();
     let horizontal_up = Vec3::new(camera_up.x, 0.0, camera_up.z);
-    for (position, stats, mut transform) in query.iter_mut() {
+    for (position, stats, billboard, mut transform) in query.iter_mut() {
         let height = height_map.height_at(**position);
         let ground_position = Vec3::new(position.x, height, position.y);
-        transform.translation = ground_position - horizontal_up * stats.size;
+        let world_offset = billboard.map_or(Vec3::ZERO, |billboard| billboard.world_offset);
+        transform.translation = ground_position - horizontal_up * stats.size + world_offset;
     }
 }
 

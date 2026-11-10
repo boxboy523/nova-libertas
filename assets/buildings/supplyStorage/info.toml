@@ -1,6 +1,11 @@
 t_type = "SupplyStorage"
 
+[building_stats]
+size = [2, 2]
+
 [sprite_info]
 type = "simple"
 file = "supplyStorage.png"
-size = [512.0, 512.0]
+scale = 0.15
+offset = [0.0, -15.0]
+world_offset = [0.0, 0.0, 15.0]

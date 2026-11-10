@@ -60,6 +60,9 @@ pub fn spawn_units_trigger(
         );
         return;
     };
+    commands.entity(e).insert(Transform::from_translation(
+        Vec3::new(event.position.x, 0.0, event.position.y) + unit_visual.world_offset,
+    ));
     spawn_billboard(&mut commands, unit_visual, e, Some(event.team));
     commands
         .entity(e)
@@ -80,12 +83,14 @@ pub fn spawn_wall_trigger(
     sprite_catalog: Res<SpriteCatalog>,
 ) {
     let e = commands.spawn_empty().id();
-    let transform = Transform::from_translation(Vec3::new(event.position.x, 0.0, event.position.y));
     let Some(visual) = sprite_catalog.sprites.get(&ThingType::Wall) else {
         warn!("UnitSprite for ThingType Wall not found in catalog");
         return;
     };
 
+    let transform = Transform::from_translation(
+        Vec3::new(event.position.x, 0.0, event.position.y) + visual.world_offset,
+    );
     commands.entity(e).insert((transform,));
     spawn_billboard(&mut commands, visual, e, None);
 }

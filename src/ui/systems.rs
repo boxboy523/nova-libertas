@@ -96,7 +96,12 @@ pub fn selection_system(
     team_query: Query<&Team>,
     ui_input_capture: Res<UiInputCapture>,
     mut ui_state: ResMut<crate::ui::UiState>,
+    placement: Res<crate::building::BuildingPlacementState>,
 ) {
+    if placement.blocks_world_input() {
+        drag_selection.active = false;
+        return;
+    }
     if state.left_just_pressed && !ui_input_capture.pointer_over_ui {
         let Ok(units_at_cursor) = spatial_grid.query_entities(state.world_position, 1.0, false)
         else {
@@ -198,7 +203,12 @@ pub fn move_selected_units(
     state: Res<MouseState>,
     keys: Res<ButtonInput<KeyCode>>,
     query_select: Query<Entity, With<Selected>>,
+    placement: Res<crate::building::BuildingPlacementState>,
+    capture: Res<UiInputCapture>,
 ) {
+    if placement.blocks_world_input() || capture.pointer_over_ui || capture.right_captured {
+        return;
+    }
     let auto_attack = keys.just_pressed(KeyCode::KeyA);
     if state.right_just_pressed || auto_attack {
         let selected_units = query_select.iter().collect::<HashSet<_>>();

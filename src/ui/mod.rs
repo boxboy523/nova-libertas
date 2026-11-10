@@ -93,7 +93,8 @@ impl Plugin for UIPlugin {
                 systems::update_hp_bar_fill_system,
             )
                 .chain()
-                .after(mouse_input),
+                .after(mouse_input)
+                .after(crate::building::BuildingPlacementSet),
         )
             .add_systems(
                 Update,

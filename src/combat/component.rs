@@ -50,3 +50,7 @@ pub struct Projectile {
     pub impact: AttackImpact, // 투사체의 공격 효과
     pub team: Team,           // 발사한 유닛의 팀
 }
+
+/// Authoritative 3D flight position; Transform may include render-only offsets.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ProjectilePosition(pub Vec3);

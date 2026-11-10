@@ -1,7 +1,7 @@
 t_type = "AttackerGun"
 [sprite_info]
 type = "animation_set"
-size = [30.0, 30.0]
+scale = 0.15
 offset = [0.0, -7.0]
 
 [sprite_info.animations.stand]

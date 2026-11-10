@@ -23,6 +23,13 @@
 - Store durable architecture, behavior, data-flow, debugging, and design knowledge in `ai-docs.org` rather than expanding this file into a project knowledge dump.
 - Keep documentation changes subject to the same explicit-edit requirement as source changes.
 
+## Cargo build isolation
+
+- For every agent-run Cargo command that compiles or checks code (`check`, `build`, `test`, `run`, `clippy`, etc.), set `CARGO_TARGET_DIR=target/pi` explicitly. This rule applies in every session, including commands run through `nix develop`.
+- Example: `CARGO_TARGET_DIR=target/pi nix develop --command cargo test --locked`.
+- Never use the user's default `target/debug` or `target/release` for agent validation, or clean those directories. Do not change the user's global Cargo configuration to enforce agent isolation.
+- See `ai-docs.org` for the diagnosed dependency-source-path cache conflict and verification guidance.
+
 ## UI markup convention
 
 - When adding a distinct panel or major UI node to an HTML UI template, place a short comment immediately above it that names its role, such as `<!-- detail panel -->`.

@@ -7,8 +7,22 @@ use crate::{
     visual::{data::{AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState, CurrentAnimation}, info::{SpriteConfig, SpriteInfoKind}, team_color::TeamColorMaterial, SpriteCatalog, UnitVisual, UnitVisualKind},
     world3d::create_atlas_quad,
 };
-use bevy::prelude::*;
+use bevy::{mesh::VertexAttributeValues, prelude::*};
 use strum::IntoEnumIterator;
+
+/// Simple sprites remain center-aligned; offset only translates their geometry.
+fn create_simple_quad(size: Vec2, offset: Vec2) -> Mesh {
+    let mut mesh = Mesh::from(Rectangle::from_size(size));
+    if let Some(VertexAttributeValues::Float32x3(positions)) =
+        mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    {
+        for position in positions {
+            position[0] += offset.x;
+            position[1] += offset.y;
+        }
+    }
+    mesh
+}
 
 pub fn sprite_catalog_startup_system(
     mut catalog: ResMut<SpriteCatalog>,
@@ -25,13 +39,16 @@ pub fn sprite_catalog_startup_system(
         let sprite_conf: SpriteConfig =
             toml::from_str(&text).expect("UnitSprite: Failed to parse thing info file");
 
-        let visual_kind = match sprite_conf.sprite_info.kind {
+        let world_size = sprite_conf.sprite_info.world_size(&info_path)
+            .unwrap_or_else(|error| panic!("Invalid sprite configuration for {t_type:?}: {error:#}"));
+        let visual_kind = match &sprite_conf.sprite_info.kind {
             SpriteInfoKind::Simple { file } => {
                 let image = asset_server.load(info_asset_path.join(file));
                 let material = TeamColorMaterial::get_team_hashmap(&image, &mut materials);
-                let mesh = meshes.add(Mesh::from(Rectangle::from_size(
-                    sprite_conf.sprite_info.size,
-                )));
+                let mesh = meshes.add(create_simple_quad(
+                    world_size,
+                    sprite_conf.sprite_info.offset,
+                ));
                 UnitVisualKind::Simple { mesh, material }
             }
 
@@ -40,6 +57,8 @@ pub fn sprite_catalog_startup_system(
                     panic!("AnimationSet must contain a 'stand' animation for {:?}", t_type);
                 }
                 UnitVisualKind::AnimationSet(AnimationSet{ animations: animations.iter().map(|(kind, anim_info)| {
+                    let frame_size = sprite_conf.sprite_info.scaled_size(anim_info.cell_size)
+                        .unwrap_or_else(|error| panic!("Invalid {kind:?} sprite size for {t_type:?}: {error}"));
                     if anim_info.frame_count > anim_info.columns {
                         panic!(
                             "Animation frame count exceeds the number of cells in the sprite sheet for {:?}",
@@ -56,7 +75,7 @@ pub fn sprite_catalog_startup_system(
                     for row in 0..anim_info.rows {
                         for col in 0..anim_info.columns {
                             let normal = meshes.add(create_atlas_quad(
-                                sprite_conf.sprite_info.size,
+                                frame_size,
                                 anim_info.columns,
                                 anim_info.rows,
                                 col,
@@ -65,7 +84,7 @@ pub fn sprite_catalog_startup_system(
                                 sprite_conf.sprite_info.offset,
                             ));
                             let flipped = meshes.add(create_atlas_quad(
-                                sprite_conf.sprite_info.size,
+                                frame_size,
                                 anim_info.columns,
                                 anim_info.rows,
                                 col,
@@ -94,7 +113,8 @@ pub fn sprite_catalog_startup_system(
             t_type,
             UnitVisual {
                 kind: visual_kind,
-                size: sprite_conf.sprite_info.size,
+                size: world_size,
+                world_offset: sprite_conf.sprite_info.world_offset,
                 anchor: sprite_conf.sprite_info.anchor,
                 roll_offset: sprite_conf.sprite_info.roll_offset_degrees.to_radians(),
             },
@@ -296,5 +316,49 @@ fn oct_to_row(oct: u32) -> (u32, bool) {
         6 => (0, false), // Down
         7 => (1, true),  // Down-Right
         _ => unreachable!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_sprite_offset_translates_vertices_without_scaling_or_uv_changes() {
+        let size = Vec2::new(76.8, 60.0);
+        let offset = Vec2::new(5.0, -20.0);
+        let original = create_simple_quad(size, Vec2::ZERO);
+        let shifted = create_simple_quad(size, offset);
+        let Some(VertexAttributeValues::Float32x3(original_positions)) =
+            original.attribute(Mesh::ATTRIBUTE_POSITION)
+        else { panic!("Expected position vertices") };
+        let Some(VertexAttributeValues::Float32x3(shifted_positions)) =
+            shifted.attribute(Mesh::ATTRIBUTE_POSITION)
+        else { panic!("Expected position vertices") };
+        for (original, shifted) in original_positions.iter().zip(shifted_positions) {
+            assert!((shifted[0] - original[0] - offset.x).abs() < 0.0001);
+            assert!((shifted[1] - original[1] - offset.y).abs() < 0.0001);
+            assert_eq!(shifted[2], original[2]);
+        }
+        let Some(VertexAttributeValues::Float32x2(original_uvs)) =
+            original.attribute(Mesh::ATTRIBUTE_UV_0)
+        else { panic!("Expected UV vertices") };
+        let Some(VertexAttributeValues::Float32x2(shifted_uvs)) =
+            shifted.attribute(Mesh::ATTRIBUTE_UV_0)
+        else { panic!("Expected UV vertices") };
+        assert_eq!(original_uvs, shifted_uvs);
+    }
+
+    #[test]
+    fn simple_sprite_zero_offset_preserves_center_alignment() {
+        let mesh = create_simple_quad(Vec2::new(40.0, 60.0), Vec2::ZERO);
+        let Some(VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else { panic!("Expected position vertices") };
+        for position in positions {
+            assert_eq!(position[0].abs(), 20.0);
+            assert_eq!(position[1].abs(), 30.0);
+            assert_eq!(position[2], 0.0);
+        }
     }
 }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{combat::component::UnitBattleStats, unit::component::UnitStats};
+use crate::{building::BuildingStats, combat::component::UnitBattleStats, unit::component::UnitStats};
 use bevy::{platform::collections::HashMap, prelude::*};
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
@@ -32,7 +32,11 @@ impl ThingType {
     pub fn get_info(&self) -> ThingInfo {
         let info_path = self.get_path().join("info.toml");
         let text = std::fs::read_to_string(info_path).expect("Failed to read thing info file");
-        toml::from_str(&text).expect("Failed to parse thing info file")
+        let info: ThingInfo = toml::from_str(&text).expect("Failed to parse thing info file");
+        if let Some(stats) = info.building_stats {
+            stats.validate().expect("Invalid building stats");
+        }
+        info
     }
 
     pub fn is_unit(&self) -> bool {
@@ -71,6 +75,7 @@ pub struct ThingInfo {
     pub t_type: ThingType,
     pub unit_stats: Option<UnitStats>,
     pub battle_stats: Option<UnitBattleStats>,
+    pub building_stats: Option<BuildingStats>,
 }
 
 #[cfg(test)]
@@ -86,16 +91,19 @@ mod tests {
         assert!(!thing_type.is_unit());
         assert!(info.unit_stats.is_none());
         assert!(info.battle_stats.is_none());
+        assert_eq!(info.building_stats.unwrap().size, UVec2::splat(3));
 
         let text = std::fs::read_to_string(thing_type.get_path().join("info.toml")).unwrap();
         let config: SpriteConfig = toml::from_str(&text).unwrap();
-        let SpriteInfoKind::Simple { file } = config.sprite_info.kind else {
+        let SpriteInfoKind::Simple { file } = &config.sprite_info.kind else {
             panic!("SupplyStorage must use a simple sprite");
         };
         assert_eq!(
             thing_type.get_path().join(file).canonicalize().unwrap(),
-            PathBuf::from("assets/buildings/supplyStorage.png").canonicalize().unwrap(),
+            PathBuf::from("assets/buildings/supplyStorage/supplyStorage.png").canonicalize().unwrap(),
         );
-        assert_eq!(config.sprite_info.size, Vec2::splat(512.0));
+        assert_eq!(config.sprite_info.scale, 0.15);
+        let size = config.sprite_info.world_size(&thing_type.get_path()).unwrap();
+        assert!((size - Vec2::splat(76.8)).length() < 0.001);
     }
 }

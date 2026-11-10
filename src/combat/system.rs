@@ -1,6 +1,6 @@
 use crate::{
     combat::{
-        component::{Attack, AttackDelivery, AttackImpact, AutoAttack, Projectile, UnitBattleStats},
+        component::{Attack, AttackDelivery, AttackImpact, AutoAttack, Projectile, ProjectilePosition, UnitBattleStats},
         event::{DamageEvent, ImpactEvent},
     },
     movement::component::UnitMovement,
@@ -159,7 +159,10 @@ pub fn attack_system(
                                     impact: battle_stats.impact,
                                     team: *team,
                                 },
-                                Transform::from_xyz(position.x, anchor.muzzle.y, position.y),
+                                ProjectilePosition(Vec3::new(position.x, anchor.muzzle.y, position.y)),
+                                Transform::from_translation(
+                                    Vec3::new(position.x, anchor.muzzle.y, position.y) + proj_visual.world_offset,
+                                ),
                             ))
                             .id();
                         spawn_billboard(&mut commands, proj_visual, proj, None);
@@ -174,7 +177,7 @@ pub fn attack_system(
 
 pub fn projectile_system(
     mut commands: Commands,
-    mut projectiles: Query<(Entity, &Projectile, &mut Transform, &mut Billboard)>,
+    mut projectiles: Query<(Entity, &Projectile, &mut ProjectilePosition, &mut Transform, &mut Billboard)>,
     query_target: Query<(&Position, Option<&VisualAnchor>)>,
     time: Res<Time>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
@@ -182,12 +185,12 @@ pub fn projectile_system(
     let delta_time = time.delta_secs();
     projectiles
         .iter_mut()
-        .for_each(|(entity, projectile, mut transform, mut billboard)| {
+        .for_each(|(entity, projectile, mut position, mut transform, mut billboard)| {
             if let Ok((target_position, opt_anchor)) = query_target.get(projectile.target) {
                 let anchor = opt_anchor.copied().unwrap_or_default();
                 let target_transform =
                     Vec3::new(target_position.x, anchor.hit.y, target_position.y);
-                let offset = target_transform - transform.translation;
+                let offset = target_transform - position.0;
                 let screen_dir = Vec2::new(
                     offset.dot(camera.right().as_vec3()),
                     offset.dot(camera.up().as_vec3()),
@@ -222,7 +225,8 @@ pub fn projectile_system(
                     // 투사체 엔티티 제거
                     commands.entity(entity).despawn();
                 } else {
-                    transform.translation += offset.normalize() * step;
+                    position.0 += offset.normalize() * step;
+                    transform.translation = position.0 + billboard.world_offset;
                 }
             } else {
                 // 목표가 존재하지 않으면 투사체 제거

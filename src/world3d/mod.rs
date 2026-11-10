@@ -12,6 +12,8 @@ pub struct World3DPlugin;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct Billboard {
     pub roll: f32,
+    /// Render-only translation in world axes, cached from the sprite catalog.
+    pub world_offset: Vec3,
     roll_offset: f32,
 }
 
@@ -78,6 +80,7 @@ pub fn spawn_billboard(
         Billboard {
             roll: 0.0,
             roll_offset: visual.roll_offset,
+            world_offset: visual.world_offset,
         },
     ));
 }
@@ -132,7 +135,7 @@ pub struct RtsCamera {
     pub radius: f32,
 }
 
-fn rts_camera_system(
+pub(crate) fn rts_camera_system(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mut mouse_wheel: MessageReader<bevy::input::mouse::MouseWheel>,

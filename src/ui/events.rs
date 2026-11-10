@@ -62,6 +62,16 @@ pub fn add_uiid(
         }
     }
     match ui_id.as_str() {
+        "build_supply" => {
+            commands.entity(trigger.entity).observe(
+                |mut click: On<Pointer<Click>>, mut commands: Commands| {
+                    if click.button == bevy::picking::pointer::PointerButton::Primary {
+                        click.propagate(false);
+                        commands.trigger(crate::building::BeginBuildingPlacement(ThingType::SupplyStorage));
+                    }
+                },
+            );
+        }
         "options_panel" => {
             commands.entity(trigger.entity).insert((
                 GlobalZIndex(300),
@@ -485,7 +495,7 @@ pub fn select_all_units(
     _event: On<SelectAllUnitsEvent>,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
-    teams: Query<(Entity, &Team)>,
+    teams: Query<(Entity, &Team), With<crate::movement::component::UnitMovement>>,
     mut ui_state: ResMut<crate::ui::UiState>,
 ) {
     ui_state.last_selected_slot = None;
