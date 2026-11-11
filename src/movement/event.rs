@@ -15,9 +15,10 @@ pub fn move_order_trigger(event: On<MoveOrderEvent>, flow_grid: ResMut<FlowGrid>
         "MoveOrderEvent received for target position: {:?}, auto_attack: {}",
         event.target_position, event.auto_attack
     );
-    let field = flow_grid.gen_flow_field(event.target_position).unwrap_or_else(|err| {
-        panic!("Failed to generate flow field: {}", err);
-    });
+    let Ok(field) = flow_grid.gen_flow_field(event.target_position) else {
+        println!("Failed to generate flow field for target position: {:?}", event.target_position);
+        return;
+    };
     let new_field = commands
         .spawn((FlowFieldEntity {
             field,

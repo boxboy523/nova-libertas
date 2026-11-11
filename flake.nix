@@ -40,6 +40,8 @@
 
           vulkan-loader
           mesa
+          perf
+          inferno
         ];
 
       in

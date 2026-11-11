@@ -1,3 +1,6 @@
 target/
 .agent-shell/
 .direnv/
+perf.data*
+trace-*
+flamegraph.svg

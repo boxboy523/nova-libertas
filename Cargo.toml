@@ -3,6 +3,9 @@ name = "nova_libertas"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+debug = true
+
 [dependencies]
 anyhow = "1.0.104"
 bevy = {  version = "0.19.0", features = ["jpeg", "file_watcher"] }
