@@ -149,8 +149,8 @@ impl GameMap {
 
     pub fn get_size(&self) -> Vec2 {
         Vec2::new(
-            (self.width - 1) as f32 * self.cell_size,
-            (self.height - 1) as f32 * self.cell_size,
+            self.width as f32 * self.cell_size,
+            self.height as f32 * self.cell_size,
         )
     }
 
@@ -175,6 +175,7 @@ impl GameMap {
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainHeightMap {
+    /// Vertex counts: one more than GameMap's cell counts along each axis.
     pub width: usize,
     pub height: usize,
     pub sample_spacing: f32,
@@ -184,14 +185,26 @@ pub struct TerrainHeightMap {
 
 impl TerrainHeightMap {
     pub fn from_game_map(game_map: &GameMap) -> Self {
-        let width = game_map.width;
-        let height = game_map.height;
+        assert!(game_map.width > 0 && game_map.height > 0, "Terrain requires a nonempty map");
+        // GameMap heights are cell-centered; terrain heights are vertex-centered.
+        let width = game_map.width + 1;
+        let height = game_map.height + 1;
         let sample_spacing = game_map.cell_size;
-        let heights = game_map
-            .landforms
-            .iter()
-            .map(|landform| landform.height as f32)
-            .collect::<Vec<f32>>();
+        let mut heights = Vec::with_capacity(width * height);
+        for vy in 0..height {
+            let sy = (vy as f32 - 0.5).clamp(0.0, (game_map.height - 1) as f32);
+            let y0 = sy.floor() as usize;
+            let y1 = (y0 + 1).min(game_map.height - 1);
+            for vx in 0..width {
+                let sx = (vx as f32 - 0.5).clamp(0.0, (game_map.width - 1) as f32);
+                let x0 = sx.floor() as usize;
+                let x1 = (x0 + 1).min(game_map.width - 1);
+                let h = |x: usize, y: usize| game_map.landforms[y * game_map.width + x].height as f32;
+                let top = h(x0, y0).lerp(h(x1, y0), sx.fract());
+                let bottom = h(x0, y1).lerp(h(x1, y1), sx.fract());
+                heights.push(top.lerp(bottom, sy.fract()));
+            }
+        }
         TerrainHeightMap {
             width,
             height,
@@ -293,5 +306,55 @@ impl TerrainHeightMap {
 
         let y = self.height_at(Vec2::new(point.x, point.z));
         Some(Vec3::new(point.x, y, point.z))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn map(width: usize, height: usize, values: &[u8]) -> GameMap {
+        GameMap {
+            width, height, cell_size: 20.0,
+            landforms: values.iter().map(|&height| Landform { height, blocked_mask: 0 }).collect(),
+            obstacle_entities: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn cell_heights_interpolate_to_vertices_with_clamped_boundaries() {
+        let map = map(2, 2, &[0, 2, 4, 6]);
+        let terrain = TerrainHeightMap::from_game_map(&map);
+        assert_eq!((terrain.width, terrain.height), (3, 3));
+        assert_eq!(terrain.heights, vec![0.0, 1.0, 2.0, 2.0, 3.0, 4.0, 4.0, 5.0, 6.0]);
+        assert_eq!(map.get_size(), Vec2::splat(40.0));
+        assert_eq!(terrain.height_at(Vec2::splat(20.0)), 3.0 * TERRAIN_HEIGHT_STEP);
+        assert_eq!(terrain.height_at(Vec2::splat(40.0)), 6.0 * TERRAIN_HEIGHT_STEP);
+        assert_eq!(terrain.height_at(Vec2::new(30.0, 10.0)), 2.5 * TERRAIN_HEIGHT_STEP);
+    }
+
+    #[test]
+    fn single_cell_and_narrow_maps_extend_without_missing_vertices() {
+        let terrain = TerrainHeightMap::from_game_map(&map(1, 1, &[2]));
+        assert_eq!((terrain.width, terrain.height), (2, 2));
+        assert_eq!(terrain.heights, vec![2.0; 4]);
+        let column = TerrainHeightMap::from_game_map(&map(1, 2, &[2, 4]));
+        assert_eq!(column.heights, vec![2.0, 2.0, 3.0, 3.0, 4.0, 4.0]);
+        let row = TerrainHeightMap::from_game_map(&map(2, 1, &[2, 4]));
+        assert_eq!(row.heights, vec![2.0, 3.0, 4.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn raycast_covers_last_row_column_and_outer_boundary() {
+        let map = map(3, 2, &[2; 6]);
+        let terrain = TerrainHeightMap::from_game_map(&map);
+        for position in [Vec2::new(50.0, 10.0), Vec2::new(10.0, 30.0), map.get_size()] {
+            let ray = Ray3d::new(Vec3::new(position.x, 1000.0, position.y), Dir3::NEG_Y);
+            let hit = terrain.raycast(&ray).unwrap();
+            assert_eq!(Vec2::new(hit.x, hit.z), position);
+            assert_eq!(hit.y, 2.0 * TERRAIN_HEIGHT_STEP);
+        }
+        let ray = Ray3d::new(Vec3::new(60.1, 1000.0, 20.0), Dir3::NEG_Y);
+        assert!(terrain.raycast(&ray).is_none());
     }
 }

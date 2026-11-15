@@ -12,12 +12,13 @@ use crate::ui::components::UiTweenState;
 use crate::ui::events::TweenFinishedEvent;
 use crate::{
     combat::{component::UnitHp, event::AttackOrderEvent},
-    input::{screen_to_ground, MouseState},
+    input::MouseState,
     map::TerrainHeightMap,
     movement::event::MoveOrderEvent,
     thing::ThingType,
     ui::components::{DragSelection, HpBarFill, HpBarRef, HpBarRoot},
     unit::{component::{Position, Selected, Team}, spatial_grid::SpatialGrid},
+    util::screen_to_ground,
     visual::SpriteCatalog,
 };
 
@@ -161,7 +162,7 @@ pub fn selection_system(
             }
         }
         spatial_grid
-            .query_entities_rect(min_world, max_world)
+            .query_entities_rect(min_world, max_world, true)
             .unwrap_or_else(|_| Vec::new())
             .into_iter()
             .filter(|e| {

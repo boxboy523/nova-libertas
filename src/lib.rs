@@ -7,6 +7,7 @@ pub mod movement;
 pub mod thing;
 pub mod ui;
 pub mod unit;
+pub mod util;
 pub mod visual;
 pub mod world3d;
 pub mod player;

@@ -10,7 +10,8 @@ use crate::{
     map::TerrainHeightMap,
     movement::flow_grid::FlowGrid,
     thing::{ThingCatalog, ThingType},
-    unit::{component::{Dead, Position, Team, UnitStats}, spatial_grid::SpatialGrid},
+    unit::{component::{Position, Team}, spatial_grid::{EntityInfo, SpatialGrid}},
+    util::{circle_rect_overlap, footprint_center, screen_to_world, snapped_origin},
     visual::{SpriteCatalog, team_color::TeamColorMaterial},
     world3d::spawn_billboard,
 };
@@ -153,23 +154,13 @@ fn cell_material(color: Color) -> StandardMaterial {
     }
 }
 
-/// The cell under the cursor is the central cell for an odd-sized footprint.
-fn snapped_origin(position: Vec2, size: UVec2, cell_size: f32) -> IVec2 {
-    (position / cell_size).floor().as_ivec2() - (size / 2).as_ivec2()
-}
-
-fn footprint_center(origin: IVec2, size: UVec2, cell_size: f32) -> Vec2 {
-    (origin.as_vec2() + size.as_vec2() * 0.5) * cell_size
-}
-
-/// Check the whole footprint against the current map and current unit positions,
-/// not the potentially older fixed-tick spatial index.
+/// Check terrain and per-cell circle overlap against nearby spatial-index candidates.
 fn valid_cells(
     flow: &FlowGrid,
     origin: IVec2,
     size: UVec2,
     terrain_size: Vec2,
-    units: &[(Vec2, f32)],
+    units: &[EntityInfo],
 ) -> Vec<bool> {
     let mut valid = Vec::with_capacity((size.x * size.y) as usize);
     for dy in 0..size.y {
@@ -185,8 +176,8 @@ fn valid_cells(
                 && !matches!(flow.map.get_cell(cell.x as usize, cell.y as usize), Cell::Wall)
                 && flow.map.can_pass(cell.x as usize, cell.y as usize,
                     EDGE_TOP | EDGE_RIGHT | EDGE_BOTTOM | EDGE_LEFT)
-                && !units.iter().any(|(position, radius)| {
-                    position.distance_squared(position.clamp(min, max)) <= radius * radius
+                && !units.iter().any(|unit| {
+                    circle_rect_overlap(unit.pos, unit.radius, min, max)
                 });
             valid.push(free);
         }
@@ -224,7 +215,6 @@ pub(super) fn update_placement(
     mut flow: ResMut<FlowGrid>,
     mut spatial: ResMut<SpatialGrid>,
     heights: Res<TerrainHeightMap>,
-    units: Query<(&Position, &UnitStats), Without<Dead>>,
     sprites: Res<SpriteCatalog>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -251,8 +241,7 @@ pub(super) fn update_placement(
     let camera_global = GlobalTransform::from(*camera_transform);
     let hit = window.cursor_position()
         .filter(|_| !capture.pointer_over_ui)
-        .and_then(|cursor| camera.viewport_to_world(&camera_global, cursor).ok())
-        .and_then(|ray| heights.raycast(&ray));
+        .and_then(|cursor| screen_to_world(camera, &camera_global, &heights, cursor));
     let Some(hit) = hit else {
         for entity in std::iter::once(session.ghost).chain(session.cells.iter().copied()) {
             commands.entity(entity).insert(Visibility::Hidden);
@@ -262,12 +251,25 @@ pub(super) fn update_placement(
     };
     let origin = snapped_origin(Vec2::new(hit.x, hit.z), session.size, flow.cell_size);
     let center = footprint_center(origin, session.size, flow.cell_size);
-    let unit_circles = units.iter().map(|(position, stats)| (position.0, stats.size)).collect::<Vec<_>>();
+    // Query once for the whole footprint. The grid expands its bucket search by
+    // max_unit_radius_cells and filters candidates with circle_rect_overlap.
+    // Clip only the query; valid_cells still rejects out-of-bounds footprint cells.
+    let grid_max = Vec2::new(spatial.map_size.x.next_down(), spatial.map_size.y.next_down());
+    let query_min = (origin.as_vec2() * flow.cell_size).clamp(Vec2::ZERO, grid_max);
+    let query_max = ((origin.as_vec2() + session.size.as_vec2()) * flow.cell_size)
+        .clamp(Vec2::ZERO, grid_max);
+    let candidates = spatial.query_entities_rect(query_min, query_max, false);
     let terrain_size = Vec2::new(
         heights.width.saturating_sub(1) as f32 * heights.sample_spacing,
         heights.height.saturating_sub(1) as f32 * heights.sample_spacing,
     );
-    let valid = valid_cells(&flow, origin, session.size, terrain_size, &unit_circles);
+    let valid = match candidates {
+        Ok(candidates) => valid_cells(&flow, origin, session.size, terrain_size, &candidates),
+        Err(error) => {
+            warn!("Building candidate query failed: {error}");
+            vec![false; (session.size.x * session.size.y) as usize]
+        }
+    };
     let visual = &sprites.sprites[&session.thing_type];
     // Simple catalog quads are centered. Lift along camera-up so the bottom
     // of the image stays anchored to the footprint's ground center.
@@ -283,7 +285,7 @@ pub(super) fn update_placement(
             index as i32 % session.size.x as i32,
             index as i32 / session.size.x as i32,
         );
-        let center = (cell.as_vec2() + Vec2::splat(0.5)) * flow.cell_size;
+        let center = footprint_center(cell, UVec2::ONE, flow.cell_size);
         if let Some(mut mesh) = meshes.get_mut(&session.cell_meshes[index]) {
             if let Some(VertexAttributeValues::Float32x3(vertices)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
                 for vertex in vertices {
@@ -395,12 +397,40 @@ mod tests {
             .insert_resource(ButtonInput::<MouseButton>::default())
             .insert_resource(ButtonInput::<KeyCode>::default())
             .insert_resource(TerrainHeightMap {
-                width: 8, height: 8, sample_spacing: 20.0, heights: vec![0.0; 64], mesh: None,
+                width: 9, height: 9, sample_spacing: 20.0, heights: vec![0.0; 81], mesh: None,
             })
             .add_plugins(BuildingPlugin);
         app.world_mut().spawn(Window::default());
         app.world_mut().spawn((Camera3d::default(), Transform::default()));
         app
+    }
+
+    #[test]
+    fn placement_can_occupy_last_row_and_column_of_grid() {
+        let mut app = test_app();
+        aim_at_map_center(&mut app);
+        let world = app.world_mut();
+        let mut cameras = world.query_filtered::<&mut Transform, With<Camera3d>>();
+        *cameras.single_mut(world).unwrap() = Transform::from_xyz(150.0, 100.0, 150.0)
+            .looking_at(Vec3::new(150.0, 0.0, 150.0), Vec3::NEG_Z);
+        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.update();
+        app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
+        app.update();
+        assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
+        let world = app.world_mut();
+        let mut buildings = world.query::<(&Building, &Position)>();
+        let (building, position) = buildings.single(world).unwrap();
+        assert_eq!(building.size, UVec2::splat(2));
+        assert!((position.0 - Vec2::splat(140.0)).length() < 0.001);
+        let flow = world.resource::<FlowGrid>();
+        let spatial = world.resource::<SpatialGrid>();
+        for y in 6..8 {
+            for x in 6..8 {
+                assert!(matches!(flow.map.get_cell(x, y), Cell::Wall));
+                assert!(spatial.obstacle_cells[y * 8 + x].is_none());
+            }
+        }
     }
 
     fn aim_at_map_center(app: &mut App) {
@@ -498,13 +528,13 @@ mod tests {
         let world = app.world_mut();
         let mut buildings = world.query::<(&Building, &ThingType, &Position)>();
         let (building, kind, position) = buildings.single(world).unwrap();
-        assert_eq!(building.size, UVec2::splat(3));
+        assert_eq!(building.size, UVec2::splat(2));
         assert_eq!(*kind, ThingType::SupplyStorage);
-        assert!(position.0.distance(Vec2::splat(70.0)) < 0.01);
+        assert!(position.0.distance(Vec2::splat(60.0)) < 0.01);
         let flow = world.resource::<FlowGrid>();
         let spatial = world.resource::<SpatialGrid>();
-        for y in 2..5 {
-            for x in 2..5 {
+        for y in 2..4 {
+            for x in 2..4 {
                 assert!(matches!(flow.map.get_cell(x, y), Cell::Wall));
                 assert!(spatial.obstacle_cells[y * 8 + x].is_none());
             }
@@ -517,9 +547,10 @@ mod tests {
     fn occupied_cell_is_red_and_click_does_not_install() {
         let mut app = test_app();
         aim_at_map_center(&mut app);
-        app.world_mut().spawn((Position(Vec2::splat(70.0)), UnitStats {
-            size: 5.0, max_speed: 10.0, acceleration: 10.0,
-        }));
+        // Center lies outside the footprint (40..80), but the radius overlaps it.
+        let position = Vec2::new(81.0, 70.0);
+        let entity = app.world_mut().spawn(Position(position)).id();
+        app.world_mut().resource_mut::<SpatialGrid>().add_entity(entity, position, 3.0).unwrap();
         app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
@@ -527,8 +558,25 @@ mod tests {
         let state = app.world().resource::<BuildingPlacementState>();
         let session = state.active.as_ref().unwrap();
         let red = &session.materials[2];
-        assert_eq!(&app.world().get::<MeshMaterial3d<StandardMaterial>>(session.cells[4]).unwrap().0, red);
+        assert_eq!(&app.world().get::<MeshMaterial3d<StandardMaterial>>(session.cells[3]).unwrap().0, red);
         assert_eq!(app.world().resource::<FlowGrid>().map.get_generation(), 0);
+    }
+
+    #[test]
+    fn circle_outside_footprint_corner_does_not_block_placement() {
+        let mut app = test_app();
+        aim_at_map_center(&mut app);
+        // AABB overlaps the footprint corner, but the circle does not.
+        let position = Vec2::splat(82.0);
+        let entity = app.world_mut().spawn(Position(position)).id();
+        app.world_mut().resource_mut::<SpatialGrid>().add_entity(entity, position, 2.5).unwrap();
+        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.update();
+        app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
+        app.update();
+        assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
+        let world = app.world_mut();
+        assert_eq!(world.query::<&Building>().iter(world).count(), 1);
     }
 
     #[test]
@@ -557,7 +605,8 @@ mod tests {
         app.world_mut().flush();
         assert!(app.world().resource::<BuildingPlacementState>().blocks_world_input());
         assert_eq!(app.world().resource::<Assets<StandardMaterial>>().len(), 3);
-        assert_eq!(app.world().resource::<Assets<Mesh>>().len(), 10);
+        // One catalog mesh plus the four cells of the configured 2x2 footprint.
+        assert_eq!(app.world().resource::<Assets<Mesh>>().len(), 5);
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Right);
         app.update();
         assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
@@ -597,7 +646,8 @@ mod tests {
         let flow = flow();
         let valid = valid_cells(&flow, IVec2::ONE, UVec2::splat(3), Vec2::splat(140.0), &[]);
         assert_eq!(valid, vec![true; 9]);
-        let valid = valid_cells(&flow, IVec2::ONE, UVec2::splat(3), Vec2::splat(140.0), &[(Vec2::new(18.0, 30.0), 3.0)]);
+        let candidates = [EntityInfo { entity: Entity::from_bits(1), pos: Vec2::new(18.0, 30.0), radius: 3.0 }];
+        let valid = valid_cells(&flow, IVec2::ONE, UVec2::splat(3), Vec2::splat(140.0), &candidates);
         assert!(!valid[0]);
         assert!(valid[1..].iter().all(|&v| v));
         assert!(valid_cells(&flow, IVec2::new(-1, 0), UVec2::ONE, Vec2::splat(140.0), &[]).iter().all(|&v| !v));

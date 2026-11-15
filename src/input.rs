@@ -80,19 +80,8 @@ pub fn mouse_input(
     state.right_released = buttons.just_released(MouseButton::Right);
 }
 
-pub fn screen_to_ground(
-    camera: &Camera,
-    camera_transform: &GlobalTransform,
-    height_map: &TerrainHeightMap,
-    screen_position: Vec2,
-) -> Option<Vec2> {
-    let ray = camera
-        .viewport_to_world(camera_transform, screen_position)
-        .ok()?;
-
-    let hit = height_map.raycast(&ray)?;
-    Some(Vec2::new(hit.x, hit.z))
-}
+// Preserve the existing public path while sharing the implementation in util.
+pub use crate::util::screen_to_ground;
 
 pub struct InputPlugin;
 

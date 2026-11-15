@@ -91,7 +91,7 @@ mod tests {
         assert!(!thing_type.is_unit());
         assert!(info.unit_stats.is_none());
         assert!(info.battle_stats.is_none());
-        assert_eq!(info.building_stats.unwrap().size, UVec2::splat(3));
+        assert_eq!(info.building_stats.unwrap().size, UVec2::splat(2));
 
         let text = std::fs::read_to_string(thing_type.get_path().join("info.toml")).unwrap();
         let config: SpriteConfig = toml::from_str(&text).unwrap();

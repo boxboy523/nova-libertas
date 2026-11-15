@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use chunk_flow_field::{map::{EDGE_BOTTOM, EDGE_RIGHT}, types::Cell};
 
-use crate::movement::flow_grid::FlowGrid;
+use crate::{movement::flow_grid::FlowGrid, util::circle_rect_overlap};
 
 #[derive(Debug, Clone)]
 pub struct Ray {
@@ -53,6 +53,7 @@ pub struct SpatialGrid {
     pub obstacle_cells: Vec<Option<Vec<Obstacle>>>, // None for Wall Cells
     pub units: Vec<Vec<EntityInfo>>,
     map_generation: usize,
+    max_unit_radius_cells: usize,
 }
 
 impl SpatialGrid {
@@ -70,6 +71,7 @@ impl SpatialGrid {
             obstacle_cells: Vec::new(),
             units: vec![Vec::with_capacity(16); map.width * map.height],
             map_generation: 0,
+            max_unit_radius_cells: 0,
         };
         grid.rebuild_obstacles(flow_grid);
         grid
@@ -161,143 +163,6 @@ impl SpatialGrid {
             .collect())
     }
 
-    // Raycasting is not implemented for edge detection
-    // pub fn raycast(&self, ray: &Ray, exclude: Option<&[Entity]>) -> RaycastResult {
-    //     if ray.length <= 0.0 {
-    //         return RaycastResult::Miss;
-    //     }
-    //     let (mut grid_x, mut grid_y) = if let Some(grid) = self.world_to_grid(ray.origin) {
-    //         if let Some(vec) = self.cells[self.width * grid.1 + grid.0].as_ref() {
-    //             let mut len_current = ray.length;
-    //             let mut rtn = None;
-    //             for info in vec {
-    //                 if let Some(ex) = exclude {
-    //                     if ex.contains(&info.entity) {
-    //                         continue;
-    //                     }
-    //                 }
-    //                 if let Some(t) = circle_line_overlap(
-    //                     info.radius,
-    //                     info.pos,
-    //                     ray.origin,
-    //                     ray.origin + ray.direction * ray.length,
-    //                 ) {
-    //                     if t * ray.length < len_current {
-    //                         len_current = t * ray.length;
-    //                         rtn = Some(info.clone());
-    //                     }
-    //                 }
-    //             }
-    //             if rtn.is_some() {
-    //                 return RaycastResult::HitEntity(
-    //                     ray.origin + ray.direction * len_current,
-    //                     rtn.unwrap(),
-    //                 );
-    //             }
-    //         } else {
-    //             return RaycastResult::HitWall(ray.origin, Vec2::ZERO); // 시작점이 벽에 있음
-    //         }
-    //         grid
-    //     } else {
-    //         return RaycastResult::OutOfBounds; // 시작점이 그리드 범위를 벗어남
-    //     };
-    //     let step_x = ray.direction.x.signum() as isize;
-    //     let step_y = ray.direction.y.signum() as isize;
-
-    //     let ray_offset = ray.origin
-    //         - Vec2::new(
-    //             grid_x as f32 * self.cell_size,
-    //             grid_y as f32 * self.cell_size,
-    //         );
-    //     let mut total_x = if ray.direction.x.abs() > 0.0001 {
-    //         if ray.direction.x > 0.0 {
-    //             (self.cell_size - ray_offset.x) / ray.direction.x
-    //         } else {
-    //             ray_offset.x / -ray.direction.x
-    //         }
-    //     } else {
-    //         f32::MAX
-    //     };
-    //     let mut total_y = if ray.direction.y.abs() > 0.0001 {
-    //         if ray.direction.y > 0.0 {
-    //             (self.cell_size - ray_offset.y) / ray.direction.y
-    //         } else {
-    //             ray_offset.y / -ray.direction.y
-    //         }
-    //     } else {
-    //         f32::MAX
-    //     };
-    //     let delta_x = if ray.direction.x.abs() > 0.0001 {
-    //         self.cell_size / ray.direction.x.abs()
-    //     } else {
-    //         f32::MAX
-    //     };
-    //     let delta_y = if ray.direction.y.abs() > 0.0001 {
-    //         self.cell_size / ray.direction.y.abs()
-    //     } else {
-    //         f32::MAX
-    //     };
-    //     let mut len_last;
-    //     while total_x.min(total_y) < ray.length {
-    //         len_last = total_x.min(total_y);
-    //         if total_x < total_y {
-    //             let next_x = grid_x as isize + step_x;
-    //             if next_x >= self.width as isize || next_x < 0 {
-    //                 return RaycastResult::OutOfBounds;
-    //             }
-    //             grid_x = next_x as usize;
-    //             total_x += delta_x;
-    //         } else {
-    //             let next_y = grid_y as isize + step_y;
-    //             if next_y >= self.height as isize || next_y < 0 {
-    //                 return RaycastResult::OutOfBounds;
-    //             }
-    //             grid_y = next_y as usize;
-    //             total_y += delta_y;
-    //         }
-    //         let mut len_current = total_x.min(total_y);
-    //         let mut rtn = None;
-    //         if let Some(vec) = self
-    //             .cells
-    //             .get(self.width * grid_y + grid_x)
-    //             .and_then(|c| c.as_ref())
-    //         {
-    //             for info in vec {
-    //                 if let Some(ex) = exclude {
-    //                     if ex.contains(&info.entity) {
-    //                         continue;
-    //                     }
-    //                 }
-    //                 if let Some(t) = circle_line_overlap(
-    //                     info.radius,
-    //                     info.pos,
-    //                     ray.origin,
-    //                     ray.origin + ray.direction * ray.length,
-    //                 ) {
-    //                     if t * ray.length < len_current {
-    //                         len_current = t * ray.length;
-    //                         rtn = Some(info.clone());
-    //                     }
-    //                 }
-    //             }
-    //         } else {
-    //             let normal = if total_x < total_y {
-    //                 Vec2::new(-step_x as f32, 0.0)
-    //             } else {
-    //                 Vec2::new(0.0, -step_y as f32)
-    //             };
-    //             return RaycastResult::HitWall(ray.origin + ray.direction * len_last, normal);
-    //         }
-    //         if rtn.is_some() {
-    //             return RaycastResult::HitEntity(
-    //                 ray.origin + ray.direction * len_current,
-    //                 rtn.unwrap(),
-    //             );
-    //         }
-    //     }
-    //     RaycastResult::Miss
-    // }
-
     pub fn collision_check(
         &self,
         position: Vec2,
@@ -305,7 +170,7 @@ impl SpatialGrid {
         exclude: Option<&[Entity]>,
         margin: f32,
     ) -> CollisionResult {
-        let grid_radius = (radius / self.cell_size).ceil() as isize + 1;
+        let grid_radius = (radius / self.cell_size).ceil() as isize + self.max_unit_radius_cells as isize;
         if let Some((grid_x, grid_y)) = self.world_to_grid(position) {
             let mut collided_entities = Vec::new();
             let mut obstacles = Vec::new();
@@ -389,6 +254,10 @@ impl SpatialGrid {
             .ok_or_else(|| anyhow::anyhow!("Entity position is out of grid bounds"))?;
         let idx = grid_y * self.width + grid_x;
         self.units[idx].push(EntityInfo { entity, radius, pos });
+        let radius_cells = (radius / self.cell_size).ceil() as usize;
+        if radius_cells > self.max_unit_radius_cells {
+            self.max_unit_radius_cells = radius_cells;
+        }
         Ok(())
     }
 
@@ -408,7 +277,7 @@ impl SpatialGrid {
         let (grid_x, grid_y) = self
             .world_to_grid(position)
             .ok_or_else(|| anyhow::anyhow!("Query position is out of grid bounds"))?;
-        let radius_in_cells = (radius / self.cell_size).ceil() as isize;
+        let radius_in_cells = (radius / self.cell_size).ceil() as isize + if by_center { 0 } else { self.max_unit_radius_cells as isize };
 
         for y in (grid_y as isize - radius_in_cells)..=(grid_y as isize + radius_in_cells) {
             for x in (grid_x as isize - radius_in_cells)..=(grid_x as isize + radius_in_cells) {
@@ -429,7 +298,7 @@ impl SpatialGrid {
         Ok(result)
     }
 
-    pub fn query_entities_rect(&self, min: Vec2, max: Vec2) -> anyhow::Result<Vec<EntityInfo>> {
+    pub fn query_entities_rect(&self, min: Vec2, max: Vec2, by_center: bool) -> anyhow::Result<Vec<EntityInfo>> {
         let mut result = Vec::new();
         let (grid_min_x, grid_min_y) = self
             .world_to_grid(min)
@@ -438,11 +307,35 @@ impl SpatialGrid {
             .world_to_grid(max)
             .ok_or_else(|| anyhow::anyhow!("Query max position is out of grid bounds"))?;
 
-        for y in grid_min_y..=grid_max_y {
-            for x in grid_min_x..=grid_max_x {
-                if x < self.width && y < self.height {
-                    let idx = y * self.width + x;
-                    result.extend(self.units[idx].iter().cloned());
+        let search_min_x = grid_min_x.saturating_sub(if by_center { 0 } else { self.max_unit_radius_cells });
+        let search_min_y = grid_min_y.saturating_sub(if by_center { 0 } else { self.max_unit_radius_cells });
+        let search_max_x = (grid_max_x + if by_center { 0 } else { self.max_unit_radius_cells }).min(self.width - 1);
+        let search_max_y = (grid_max_y + if by_center { 0 } else { self.max_unit_radius_cells }).min(self.height - 1);
+        for y in search_min_y..=search_max_y {
+            for x in search_min_x..=search_max_x {
+                let idx = y * self.width + x;
+                if grid_min_x < x && x < grid_max_x && grid_min_y < y && y < grid_max_y { // Entites in strictly inside the rectangle
+                    result.extend(
+                        self.units[idx].iter().cloned()
+                    );
+                } else if !by_center { // Boundery Case, detect overlapping
+                    result.extend(
+                        self.units[idx]
+                            .iter()
+                            .filter(|e| {
+                                circle_rect_overlap(e.pos, e.radius, min, max)
+                            })
+                            .cloned(),
+                    );
+                } else {
+                    result.extend(
+                        self.units[idx]
+                            .iter()
+                            .filter(|e| {
+                                e.pos.x >= min.x && e.pos.x <= max.x && e.pos.y >= min.y && e.pos.y <= max.y
+                            })
+                            .cloned(),
+                    );
                 }
             }
         }
@@ -470,34 +363,6 @@ impl SpatialGrid {
     }
 }
 
-fn circle_line_overlap(radius: f32, center: Vec2, line_start: Vec2, line_end: Vec2) -> Option<f32> {
-    let delta = line_start - line_end;
-    let sigma = 0.00001;
-    let a = delta.length_squared();
-    if a < sigma {
-        return None;
-    }
-    let to_center = line_end - center;
-    let b_half = to_center.x * delta.x + to_center.y * delta.y;
-    let c = to_center.length_squared() - radius.powi(2);
-    let det = b_half.powi(2) - a * c;
-    if det < 0.0 {
-        return None;
-    }
-    let t1 = (-b_half + det.sqrt()) / a;
-    let t2 = (-b_half - det.sqrt()) / a;
-    let t1_valid = t1 >= 0.0 && t1 <= 1.0;
-    let t2_valid = t2 >= 0.0 && t2 <= 1.0;
-    if t1_valid && t2_valid {
-        return Some(t1.min(t2));
-    } else if t1_valid {
-        return Some(t1);
-    } else if t2_valid {
-        return Some(t2);
-    } else {
-        return None;
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -587,8 +452,32 @@ mod tests {
             height: 1,
             obstacle_cells: vec![None, Some(Vec::new())],
             units: vec![Vec::new(), Vec::new()],
+            max_unit_radius_cells: 0,
             map_generation: 0,
         }
+    }
+
+    #[test]
+    fn registration_tracks_maximum_radius_in_cells() {
+        let mut grid = test_grid();
+        assert_eq!(grid.max_unit_radius_cells, 0);
+        for (id, radius, expected) in [(1, 2.0, 1), (2, 21.0, 2), (3, 1.0, 2)] {
+            grid.add_entity(Entity::from_bits(id), Vec2::splat(10.0), radius).unwrap();
+            assert_eq!(grid.max_unit_radius_cells, expected);
+        }
+    }
+
+    #[test]
+    fn rectangle_overlap_finds_neighboring_unit_but_center_mode_excludes_it() {
+        let mut grid = test_grid();
+        let entity = Entity::from_bits(1);
+        grid.add_entity(entity, Vec2::new(21.0, 10.0), 3.0).unwrap();
+        let min = Vec2::new(10.0, 5.0);
+        let max = Vec2::new(19.0, 15.0);
+        assert!(grid.query_entities_rect(min, max, true).unwrap().is_empty());
+        let overlaps = grid.query_entities_rect(min, max, false).unwrap();
+        assert_eq!(overlaps.len(), 1);
+        assert_eq!(overlaps[0].entity, entity);
     }
 
     #[test]
@@ -601,7 +490,7 @@ mod tests {
         assert!(grid.get_entities_at(position).is_err());
         assert_eq!(grid.query_entities(position, 1.0, true).unwrap().len(), 1);
         assert_eq!(
-            grid.query_entities_rect(Vec2::ZERO, Vec2::new(39.0, 19.0))
+            grid.query_entities_rect(Vec2::ZERO, Vec2::new(39.0, 19.0), false)
                 .unwrap().len(),
             1,
         );
