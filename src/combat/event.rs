@@ -15,7 +15,7 @@ pub struct AttackOrderEvent {
 pub fn attack_order_trigger(
     event: On<AttackOrderEvent>,
     mut commands: Commands,
-    mut flow_grid: ResMut<FlowGrid>,
+    flow_grid: Res<FlowGrid>,
     query: Query<&Position>,
 ) {
     println!("AttackOrderEvent received for target: {:?}", event.target);

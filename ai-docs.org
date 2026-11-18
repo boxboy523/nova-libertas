@@ -136,3 +136,121 @@ CARGO_TARGET_DIR=target/pi nix develop --command cargo run --locked
 - 자동공격 탐색 반경, 표적 우선순위, 추격 거리, 목적지 도착 후 상태의 최종 규칙.
 - TMX tile ID와 높이/통행 규칙을 asset metadata로 이동할지 여부.
 - 건설/연구/생산 및 자원 수급의 gameplay 규칙과 현재 HUD를 연결할 범위.
+
+* 구조 코드 리뷰: 긴 함수, 쓰기 접근, 플러그인 결합도
+** 범위와 판정 기준
+- 상태: 아래 항목은 모두 미해결 리뷰 항목 또는 개선 제안이다. 이 기록은 리팩터링 완료를 뜻하지 않는다.
+- BuildingPlugin을 중심으로 UI, Input, Movement, Combat, Unit, Visual, World3D의 연결 경로를 정적으로 확인했다. 이번 리뷰와 문서화에서는 코드 수정, 테스트 실행, 게임 실행을 하지 않았다.
+- 기준은 (1) 긴 함수와 책임 혼재, (2) mutable Query/Single/Resource가 둘 이상인 시스템, (3) 다른 플러그인의 상태·표현·실행 순서에 대한 강한 결합이다.
+- 행 번호와 길이는 리뷰 시점의 참고값이다. 이후 코드 변경 시 파일 경로와 심볼을 기준으로 다시 확인한다.
+- mutable 파라미터 개수 자체는 결함이 아니다. 같은 상태 전이에 필요한 쓰기인지, 다른 책임을 떠안아 늘어난 쓰기인지 구분한다. Commands는 아래 개수에서 제외하고 Single<&mut T>는 포함한다.
+- Query<(&mut A, &mut B)>는 쓰기 가능한 파라미터 하나이며 컴포넌트 쓰기 대상은 둘이다. 파라미터 수와 변경 대상 수를 혼동하지 않는다.
+- 현재 건설 검증은 SpatialGrid의 유닛 스냅샷을 조회한다. 이전의 현재 Position 전체 Query 기반 설명을 그대로 적용하면 안 된다. 기존 본문 일부는 건물·오프셋 구현 이전 기록이므로 현재 동작은 소스와 이 리뷰의 확인 범위를 함께 참조한다.
+
+** 긴 함수 목록
+| 함수 | 파일과 시작 행 | 대략적인 길이 | 평가 |
+|------+----------------+---------------+------|
+| update_placement | src/building/placement.rs:207 | 118줄 | 입력·검증·표현·설치·정리 혼재, 최우선 |
+| selection_system | src/ui/systems.rs:89 | 112줄 | 클릭·드래그 선택·공격 명령·UI 상태 혼재 |
+| add_uiid | src/ui/events.rs:27 | 145줄 | UI 종류별 초기화와 observer 연결 누적 |
+| attack_system | src/combat/system.rs:91 | 86줄 | 공격 실행·이동 방향·투사체 렌더 생성 혼재 |
+| begin_placement | src/building/placement.rs:66 | 80줄 | 배치 상태 시작과 그래픽 자원 생성 혼재 |
+| sprite_catalog_startup_system | src/visual/system.rs:27 | 97줄 | 자산 구축이라는 응집도는 있어 후순위 |
+| toggle_bottom_panel | src/ui/events.rs:356 | 92줄 | 패널 상태 전이와 표현 구성 분리 검토 |
+| avoid_system | src/movement/move_system.rs:247 | 80줄 | 알고리즘 응집도는 있어 후순위 |
+
+*** L1: update_placement의 책임과 쓰기 범위가 과도함 (우선순위 높음)
+- 근거: 세션/입력 점유 해제, 취소와 cleanup, 커서 raycast, 격자 스냅, 공간 후보 검색, 셀 검증, ghost 표시, 셀 메시 정점·재질 변경, 장애물 등록, 건물/빌보드 생성, 세션 정리를 한 함수에서 수행한다.
+- 영향: 표시 방식 변경과 설치 규칙 변경이 같은 함수를 건드린다. 분기마다 필요한 자원이 달라도 시스템 전체의 쓰기 접근은 넓게 유지된다.
+- 개선 경계: 배치 후보 계산 / 미리보기 표현 / 설치 확정 / 배치 종료와 임시 자원 회수.
+- 보존할 제약: 미리보기의 유효성 결과를 나중에 무조건 신뢰해서는 안 된다. 설치 확정 시 현재 월드 기준으로 검증한 뒤 장애물을 즉시 등록하는 일관성을 유지한다.
+- 검증 방향: 설치·취소·UI 시작 클릭 방지·최종 입력 release 점유·장애물 동기화·임시 자원 회수·Position/점유 영역과 렌더 오프셋의 분리를 회귀 검사한다.
+
+*** L2: selection_system의 명령 발행 혼재와 공격 명령 중복 (우선순위 높음)
+- 근거: src/ui/systems.rs:120–126의 적 클릭 분기는 query_select.iter().for_each 내부에서 전체 선택 집합을 담은 AttackOrderEvent를 발생시킨다.
+- 정적으로 확인되는 동작: 선택 유닛이 N개면 동일한 전체 집합의 공격 명령을 N번 발행한다. src/combat/event.rs::attack_order_trigger는 호출마다 FlowFieldEntity를 생성하므로 중복 생성과 유닛 상태 덮어쓰기가 뒤따른다. 실제 비용은 측정하지 않았다.
+- 개선 방향: 클릭/드래그 선택과 명령 발행의 경계를 분리하고 공격 명령은 한 번만 발생시킨다.
+- 검증 방향: 여러 유닛으로 적을 한 번 클릭했을 때 이벤트와 공유 방향장 생성 수, 각 유닛의 최종 명령 참조를 확인한다.
+
+*** L3: 초기화 함수와 알고리즘 함수는 분리 방식이 달라야 함 (우선순위 중간/낮음)
+- begin_placement는 배치 시작이라는 단일 생명주기에 묶인다. ghost 재질, 셀 표시, 미리보기 엔티티 생성을 일반 보조 함수로 추출하는 것부터 검토한다. 반드시 여러 ECS 시스템으로 나눌 필요는 없다.
+- add_uiid는 UI 종류별 observer/초기화 연결을 구분하고, toggle_bottom_panel은 상태 전이 계산과 표현 적용을 구분하는 방향을 검토한다.
+- sprite_catalog_startup_system은 simple/animation 메시 구축을 보조 함수로 분리할 수 있지만 시작 시 자산 구축이라는 응집도는 유지한다.
+- avoid_system은 Agent 생성 등의 중복 추출을 검토하되, 행 수만 줄이려고 알고리즘을 여러 스케줄 단계로 쪼개지 않는다.
+
+** 쓰기 가능한 파라미터가 둘 이상인 주요 시스템
+| 시스템 | 쓰기 가능한 Query/Single/Resource | 개수 | 판단 |
+|--------+----------------------------------+------+------|
+| update_placement | BuildingPlacementState, FlowGrid, SpatialGrid, Assets<Mesh>, Assets<StandardMaterial> | 5 | 서로 다른 책임, 최우선 축소 |
+| begin_placement | BuildingPlacementState, Assets<Mesh>, Assets<StandardMaterial> | 3 | 생성 생명주기의 응집성 있음 |
+| remove_building_obstacle | FlowGrid, SpatialGrid | 2 | 원본과 파생 인덱스 이중 갱신 |
+| sprite_catalog_startup_system | SpriteCatalog, Assets<Mesh>, Assets<TeamColorMaterial> | 3 | 시작 시 자산 구축으로 자연스러운 편 |
+| setup_world_3d | TerrainHeightMap, Assets<Mesh>, Assets<StandardMaterial> | 3 | 초기화 책임으로 묶을 수 있음 |
+| flow_movement_system | 유닛 상태 Query, FlowFieldEntity Query | 2 | 경로 캐시 갱신과 이동 샘플링 결합 |
+| acceleration_system | Moving 대상 Query, Stopped 대상 Query | 2 | 배타적인 집합의 동일 속도 조절 책임 |
+| update_cur_anim_system | Moving 대상 Query, Stopped 대상 Query | 2 | 배타적인 집합의 애니메이션 상태 처리 |
+| selection_system | DragSelection Single, UiState | 2 | 선택 상태와 패널 상태 결합 |
+| scroll_panel_input | ScrollPosition Query, UiInputCapture | 2 | 스크롤 처리와 입력 소비의 응집성 있음 |
+| set_options_panel_open | UiState, Visibility Query | 2 | 작은 상태/표현 전환으로 응집성 있음 |
+
+*** M1: update_placement의 넓은 정적 쓰기 접근 (우선순위 높음)
+- 근거: 활성 세션이 없어서 조기 반환하더라도 시스템의 등록된 접근 범위에는 FlowGrid, SpatialGrid, 메시/재질 asset 등의 쓰기가 남는다.
+- 영향: 해당 자원의 읽기/쓰기 시스템과 병렬 실행 가능성을 제한한다. 실제 frame 비용과 병목 여부는 프로파일링이 필요하다.
+- 개선 방향: 후보 계산에는 Res<FlowGrid>/Res<SpatialGrid>를 사용하고, 맵 변경은 설치 확정 경로로 제한한다. 미리보기 표현과 종료 시 자원 회수의 쓰기도 별도 책임으로 검토한다. 배치 활성 여부에 따른 run condition은 입력 release 점유 해제 경로를 빠뜨리지 않도록 설계한다.
+- 주의: SystemParam으로 인자를 포장해도 정적 쓰기 접근과 책임 결합은 줄어들지 않는다.
+
+*** M2: attack_order_trigger의 불필요한 ResMut (개선 비용 낮음)
+- 근거: src/combat/event.rs:18에서 ResMut<FlowGrid>를 받지만 호출하는 src/movement/flow_grid.rs::gen_flow_field는 &self 메서드다.
+- 개선 방향: Res<FlowGrid>로 좁힐 수 있다. 다른 책임 분리 없이도 불필요한 배타적 접근을 제거할 수 있는 후보다.
+
+*** M3: mutable Query가 둘이라는 이유만으로 나누지 않을 사례
+- acceleration_system (src/movement/move_system.rs:328)은 Moving/Stopped를 배타적으로 조회해 같은 속도 조절 책임을 수행한다. 개수 자체를 이유로 분리할 필요는 낮다.
+- update_cur_anim_system도 배타적인 이동/정지 집합의 표현 상태를 갱신한다. Query 수보다 상태 전이와 변경 감지 조건의 정확성을 우선한다.
+- scroll_panel_input과 set_options_panel_open은 상태 변경과 해당 동작의 표현/입력 소비가 작은 범위에서 응집되어 있다.
+
+** 다른 플러그인과의 강한 결합
+*** C1: 투사체 시뮬레이션과 표현의 결합 (우선순위 높음)
+- 근거: src/combat/system.rs::projectile_system (:178–229)은 ProjectilePosition뿐 아니라 mutable Transform/Billboard와 Camera3d의 GlobalTransform을 요구한다.
+- 영향: 실제 비행/도착 판정의 시스템 실행과 엔티티 조회가 카메라 및 렌더 컴포넌트 구성에 의존한다. 렌더 없는 전투 테스트나 다른 표현 방식으로의 교체가 어렵다.
+- 현재 ProjectilePosition으로 권위 위치 데이터는 분리했지만 시스템 책임은 아직 분리하지 않았다.
+- attack_system (:91–176)도 SpriteCatalog를 조회하고 spawn_billboard를 호출한다. 투사체 생성이 렌더 자산에 의존하며 이동 방향 변경까지 함께 담당한다.
+- 개선 방향: Combat은 권위 위치 갱신·도착 판정·DamageEvent/ImpactEvent를 소유하고, 표현 시스템은 위치→Transform, 비행 방향과 카메라→Billboard.roll, world_offset 적용을 담당한다.
+- 보존할 제약: 렌더 오프셋이 속도·비행 경로·도착 시점·피해 결과에 영향을 주면 안 된다. 카메라가 없거나 렌더 컴포넌트가 없어도 시뮬레이션을 검증할 수 있어야 한다.
+
+*** C2: 플러그인 사이의 시뮬레이션/공간 인덱스 갱신 순서 (우선순위 높음)
+- 근거: src/unit/mod.rs:16, src/movement/mod.rs:15, src/combat/mod.rs:14는 각 FixedUpdate 체인 내부 순서만 정의하며 세 플러그인 사이의 명시적 선후 관계는 없다.
+- 현재 src/building/placement.rs:261은 SpatialGrid의 유닛 스냅샷으로 배치 후보를 검사하므로 Position 변경과 공간 인덱스 갱신의 순서가 중요하다.
+- 위험: SpatialGrid 갱신이 이동 전에 실행되면 이후 건설 검증이 이전 위치를 볼 수 있다. 실제 겹침 설치 재현 여부는 아직 검증하지 않았다.
+- 주의: 자원 충돌에 따른 실행 직렬화와 원하는 선후 관계 보장은 다르다. plugin 등록 순서도 실행 순서 계약이 아니다.
+- 개선 방향: 공유 SystemSet으로 시뮬레이션 단계와 공간 인덱스 갱신 단계를 정의하고, 관련 FixedUpdate 및 Update 소비자가 어느 시점의 상태를 보는지 명시한다.
+- 검증 방향: 이동 중인 유닛 근처에서 건설하는 경계 사례와, tick 전후 SpatialGrid/Position 일치 여부를 검사한다.
+
+*** C3: UI와 Building의 입력 점유/스케줄 직접 의존 (우선순위 중간)
+- 근거: src/ui/systems.rs:100, :207은 BuildingPlacementState를 직접 읽고, src/ui/mod.rs:97은 BuildingPlacementSet 뒤에 실행한다. src/building/mod.rs:46–47은 input::mouse_input과 world3d::rts_camera_system이라는 구체 함수 뒤에 실행한다.
+- 영향: UI가 건설 모드의 구체 상태와 순서를 안다. 스킬 조준·공격 대상 지정·건물 이동 같은 모드가 늘면 개별 의존성이 확장된다.
+- 개선 방향: 입력 계층의 공통 월드 상호작용 모드/입력 점유 계약과 의미 기반 스케줄 세트를 검토한다.
+- 보존할 제약: UI 제스처 capture와 월드 모드 점유는 서로 다른 의미다. 기존 UiInputCapture에 무조건 합치지 말고 클릭 시작/해제와 취소 입력의 소유권을 유지한다.
+
+*** C4: Combat과 Movement의 내부 상태 전이 상호 의존 (우선순위 중간)
+- 근거: src/combat/event.rs::attack_order_trigger (:15–52)는 FlowField 생성, FlowFieldEntity/FieldFollowTarget 구성, Moving 삽입, Stopped/DelayedStopTrigger 제거를 직접 수행한다.
+- 반대 방향 의존: src/movement/mod.rs::set_stopped (:43–47)는 combat::Attack을 제거한다.
+- 영향: 이동 상태 모델 변경이 전투 구현에 전파되고, 이동 중단과 공격 취소의 의미가 결합된다.
+- 개선 방향: Combat은 추적 대상을 향해 이동하라는 의도를 전달하고 Movement가 방향장과 이동 컴포넌트 전이를 소유하도록 경계를 검토한다. 이동 중단과 공격 취소가 항상 같은 뜻인지도 별도로 결정한다.
+- 검증 방향: 공격 명령·추적·사거리 진입·정지·대상 소멸·명령 교체 시 상태 컴포넌트와 공유 방향장 수명을 검사한다.
+
+*** C5: Building이 장애물 원본과 파생 인덱스를 직접 함께 관리 (우선순위 중간)
+- 근거: src/building/placement.rs:306–316 및 :345–354는 FlowGrid.map 변경 후 SpatialGrid 갱신을 직접 호출한다. sync_spatial_obstacles도 FixedPreUpdate에서 갱신한다.
+- 장점: 설치/제거 직후 즉시 일관성을 확보한다. mutable 자원이 둘이라는 이유만으로 이 보장을 제거하면 안 된다.
+- 위험: 문·파괴 가능한 지형 등 다른 변경 주체가 늘면 원본 변경과 인덱스 갱신 규칙을 여러 곳에서 반복하게 된다.
+- 개선 방향: 장애물 변경의 소유권과 파생 인덱스 동기화 시점을 공통 계약으로 정한다. 단순히 이벤트로 지연시키면 같은 프레임의 후속 입력이 낡은 맵을 볼 수 있으므로 적용/관측 시점을 함께 설계한다.
+- 검증 방향: 설치 직후 재설치 차단, 제거 직후 통행 복구, 공간 인덱스의 유닛 항목 보존, 방향장의 map generation 변경 관측을 확인한다.
+
+** 개선 순서와 리팩터링 원칙
+1. 명확한 국소 문제: 선택 유닛 수만큼 발생하는 공격 명령 중복, 불필요한 ResMut를 먼저 처리한다.
+2. Movement/Combat/Unit 사이 시뮬레이션 및 SpatialGrid 갱신 순서 계약을 명시한다.
+3. update_placement를 후보 계산 / 표현 / 설치 확정 / 종료 책임으로 정리한다.
+4. 투사체 시뮬레이션과 렌더 표현을 분리한다.
+5. 입력 점유·추적 이동·장애물 변경에 대한 플러그인 간 의도 전달과 소유권을 정리한다.
+6. add_uiid 등 긴 초기화 함수와 나머지 보조 함수 추출을 진행한다.
+- 우선 목표는 함수 길이와 인자 수를 기계적으로 줄이는 것이 아니라 각 상태의 최종 작성자와 관측 시점을 명확히 하는 것이다.
+- 위 순서는 제안이며 구현 승인이 아니다. 각 수정은 별도 요청 범위와 회귀 검증 기준을 확인한 뒤 진행한다.
