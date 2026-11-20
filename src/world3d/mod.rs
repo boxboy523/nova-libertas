@@ -12,8 +12,6 @@ pub struct World3DPlugin;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct Billboard {
     pub roll: f32,
-    /// Render-only translation in world axes, cached from the sprite catalog.
-    pub world_offset: Vec3,
     roll_offset: f32,
 }
 
@@ -72,17 +70,19 @@ pub fn spawn_billboard(
     visual: &UnitVisual,
     target: Entity,
     team: Option<Team>,
-) {
+) -> Entity {
+    commands.entity(target).insert_if_new(Visibility::Inherited);
     let (mesh, material) = visual.get_mesh_mat(None, team);
-    commands.entity(target).insert((
+    commands.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(material),
         Billboard {
             roll: 0.0,
             roll_offset: visual.roll_offset,
-            world_offset: visual.world_offset,
         },
-    ));
+        Transform::from_translation(visual.model_offset),
+        ChildOf(target),
+    )).id()
 }
 
 fn billboard_system(
@@ -103,7 +103,7 @@ pub fn create_atlas_quad(
     column: u32,
     row: u32,
     fliped: bool,
-    offset: Vec2,
+    sprite_offset: Vec2,
 ) -> Mesh {
     let mut mesh = Mesh::from(Rectangle::new(size.x, size.y));
 
@@ -111,8 +111,8 @@ pub fn create_atlas_quad(
         mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
     {
         for position in positions {
-            position[0] += offset.x;
-            position[1] += size.y * 0.5 + offset.y;
+            position[0] += sprite_offset.x;
+            position[1] += size.y * 0.5 + sprite_offset.y;
         }
     }
 

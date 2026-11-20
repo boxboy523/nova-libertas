@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 
-use crate::{thing::ThingType, unit::component::Team, visual::{data::{AnimationKind, AnimationSet}, info::VisualAnchor, team_color::TeamColorMaterial}};
+use crate::{thing::ThingType, unit::component::Team, visual::{data::{AnimationKind, AnimationSet, CurrentAnimation}, info::VisualAnchor, team_color::TeamColorMaterial}};
 use bevy::prelude::*;
 
 pub mod data;
 pub mod info;
 pub mod system;
 pub mod team_color;
+pub mod event;
 
 #[derive(Debug, Clone)]
 pub struct UnitVisual {
     pub kind: UnitVisualKind,
     pub size: Vec2,
     /// Render-only translation in world axes; never changes gameplay position.
-    pub world_offset: Vec3,
+    pub model_offset: Vec3,
     pub anchor: Option<VisualAnchor>,
     pub roll_offset: f32,
 }
@@ -65,6 +66,27 @@ pub struct SpriteCatalog {
     pub sprites: HashMap<ThingType, UnitVisual>,
 }
 
+impl SpriteCatalog {
+    pub fn get_material(&self, t_type: ThingType, team: Team, kind: AnimationKind) -> Option<Handle<TeamColorMaterial>> {
+        self.sprites
+            .get(&t_type)
+            .and_then(|visual| match &visual.kind {
+                UnitVisualKind::AnimationSet(animation_set) => animation_set.animations.get(&kind),
+                _ => None,
+            }).map(|anim_data| &anim_data.material)
+            .and_then(|team_materials| team_materials.get(&team).cloned())
+    }
+
+    pub fn get_data(&self, t_type: ThingType, kind: AnimationKind) -> Option<&data::AnimationData> {
+        self.sprites
+            .get(&t_type)
+            .and_then(|visual| match &visual.kind {
+                UnitVisualKind::AnimationSet(animation_set) => animation_set.animations.get(&kind),
+                _ => None,
+            })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SpritePlugin;
 
@@ -81,6 +103,7 @@ impl Plugin for SpritePlugin {
                     system::update_cur_anim_system,
                 )
                     .chain(),
-            );
+            )
+            .add_observer(event::change_visual_trigger);
     }
 }

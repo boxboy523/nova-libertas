@@ -27,9 +27,10 @@ pub struct AnimationFrameMesh {
     pub flipped: Handle<Mesh>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnimationKind {
+    #[default]
     Stand,
     Move,
     Attack,
@@ -56,7 +57,9 @@ pub struct AnimationState {
     pub columns: u32,
     pub rows: u32,
     pub looping: bool,
+    pub kind: AnimationKind,
     pub facing_oct: u32,
+    pub mesh_dirty: bool,
 }
 
 impl AnimationState {
@@ -69,5 +72,45 @@ impl AnimationState {
             looping: data.looping,
             ..default()
         }
+    }
+
+    pub fn update_from_data(&mut self, data: &AnimationData) {
+        self.frame_count = data.frame_count;
+        self.frame = 0;
+        self.timer = Timer::from_seconds(1.0 / data.fps, TimerMode::Repeating);
+        self.columns = data.columns;
+        self.rows = data.rows;
+        self.looping = data.looping;
+        self.mesh_dirty = true;
+    }
+
+    pub fn update_fps(&mut self, fps: f32) {
+        self.timer.set_duration(std::time::Duration::from_secs_f32(1.0 / fps));
+    }
+
+    pub fn tick(&mut self, delta: f32) {
+        self.timer.tick(std::time::Duration::from_secs_f32(delta));
+        if self.timer.just_finished() {
+            self.frame += 1;
+            if self.frame >= self.frame_count {
+                if self.looping {
+                    self.frame = 0;
+                } else {
+                    self.frame = self.frame_count - 1;
+                }
+            }
+            self.mesh_dirty = true;
+        }
+    }
+
+    pub fn get_material_handle(
+        &self,
+        data: &AnimationData,
+        team: Team,
+    ) -> Handle<TeamColorMaterial> {
+        data.material
+            .get(&team)
+            .expect("Material not found for team")
+            .clone()
     }
 }

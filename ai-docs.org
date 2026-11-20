@@ -214,7 +214,7 @@ CARGO_TARGET_DIR=target/pi nix develop --command cargo run --locked
 - 영향: 실제 비행/도착 판정의 시스템 실행과 엔티티 조회가 카메라 및 렌더 컴포넌트 구성에 의존한다. 렌더 없는 전투 테스트나 다른 표현 방식으로의 교체가 어렵다.
 - 현재 ProjectilePosition으로 권위 위치 데이터는 분리했지만 시스템 책임은 아직 분리하지 않았다.
 - attack_system (:91–176)도 SpriteCatalog를 조회하고 spawn_billboard를 호출한다. 투사체 생성이 렌더 자산에 의존하며 이동 방향 변경까지 함께 담당한다.
-- 개선 방향: Combat은 권위 위치 갱신·도착 판정·DamageEvent/ImpactEvent를 소유하고, 표현 시스템은 위치→Transform, 비행 방향과 카메라→Billboard.roll, world_offset 적용을 담당한다.
+- 개선 방향: Combat은 권위 위치 갱신·도착 판정·DamageEvent/ImpactEvent를 소유하고, 표현 시스템은 위치→Transform, 비행 방향과 카메라→Billboard.roll, model_offset 적용을 담당한다.
 - 보존할 제약: 렌더 오프셋이 속도·비행 경로·도착 시점·피해 결과에 영향을 주면 안 된다. 카메라가 없거나 렌더 컴포넌트가 없어도 시뮬레이션을 검증할 수 있어야 한다.
 
 *** C2: 플러그인 사이의 시뮬레이션/공간 인덱스 갱신 순서 (우선순위 높음)

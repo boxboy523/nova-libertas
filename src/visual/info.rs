@@ -21,10 +21,10 @@ pub struct SpriteInfo {
     /// World units per source pixel (per animation frame, not the full sheet).
     pub scale: f32,
     #[serde(default)]
-    pub offset: Vec2, // Sprite-plane offset in world units; not multiplied by scale.
+    pub sprite_offset: Vec2, // Sprite-plane offset in world units; not multiplied by scale.
     /// Render-only translation along world X/Y/Z, independent of billboard rotation.
     #[serde(default)]
-    pub world_offset: Vec3,
+    pub model_offset: Vec3,
     pub anchor: Option<VisualAnchor>, // 시각적 앵커 포인트
     #[serde(default)]
     pub roll_offset_degrees: f32, // 회전 오프셋 각도 (도 단위)
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn world_offset_defaults_to_zero_and_reads_world_axes() {
+    fn model_offset_defaults_to_zero_and_reads_world_axes() {
         let text = r#"
             [sprite_info]
             type = "simple"
@@ -159,12 +159,13 @@ mod tests {
             scale = 0.15
         "#;
         let defaults: SpriteConfig = toml::from_str(text).unwrap();
-        assert_eq!(defaults.sprite_info.world_offset, Vec3::ZERO);
+        assert_eq!(defaults.sprite_info.model_offset, Vec3::ZERO);
+        assert_eq!(defaults.sprite_info.sprite_offset, Vec2::ZERO);
         let configured: SpriteConfig = toml::from_str(&format!(
-            "{text}\nworld_offset = [3.0, 10.0, -5.0]\noffset = [1.0, -2.0]\n"
+            "{text}\nmodel_offset = [3.0, 10.0, -5.0]\nsprite_offset = [1.0, -2.0]\n"
         )).unwrap();
-        assert_eq!(configured.sprite_info.world_offset, Vec3::new(3.0, 10.0, -5.0));
-        assert_eq!(configured.sprite_info.offset, Vec2::new(1.0, -2.0));
+        assert_eq!(configured.sprite_info.model_offset, Vec3::new(3.0, 10.0, -5.0));
+        assert_eq!(configured.sprite_info.sprite_offset, Vec2::new(1.0, -2.0));
         let size = configured.sprite_info.scaled_size(UVec2::splat(100)).unwrap();
         assert!((size - Vec2::splat(15.0)).length() < 0.001);
     }
@@ -172,7 +173,7 @@ mod tests {
     #[test]
     fn offsets_and_anchors_remain_world_space() {
         let info = sprite_info(ThingType::AttackerGun);
-        assert_eq!(info.offset, Vec2::new(0.0, -7.0));
+        assert_eq!(info.sprite_offset, Vec2::new(0.0, -7.0));
         let anchor = info.anchor.unwrap();
         assert_eq!(anchor.muzzle, Vec2::new(0.0, 20.0));
         assert_eq!(anchor.hit, Vec2::new(0.0, 20.0));

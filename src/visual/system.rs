@@ -4,21 +4,21 @@ use crate::{
     movement::component::{Moving, Stopped, UnitMovement},
     thing::ThingType,
     unit::component::Team,
-    visual::{data::{AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState, CurrentAnimation}, info::{SpriteConfig, SpriteInfoKind}, team_color::TeamColorMaterial, SpriteCatalog, UnitVisual, UnitVisualKind},
-    world3d::create_atlas_quad,
+    visual::{SpriteCatalog, UnitVisual, UnitVisualKind, data::{AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState, CurrentAnimation}, event::ChangeVisualEvent, info::{SpriteConfig, SpriteInfoKind}, team_color::TeamColorMaterial},
+    world3d::{Billboard, create_atlas_quad},
 };
 use bevy::{mesh::VertexAttributeValues, prelude::*};
 use strum::IntoEnumIterator;
 
-/// Simple sprites remain center-aligned; offset only translates their geometry.
-fn create_simple_quad(size: Vec2, offset: Vec2) -> Mesh {
+/// Simple sprites remain center-aligned; sprite_offset only translates their geometry.
+fn create_simple_quad(size: Vec2, sprite_offset: Vec2) -> Mesh {
     let mut mesh = Mesh::from(Rectangle::from_size(size));
     if let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
     {
         for position in positions {
-            position[0] += offset.x;
-            position[1] += offset.y;
+            position[0] += sprite_offset.x;
+            position[1] += sprite_offset.y;
         }
     }
     mesh
@@ -47,7 +47,7 @@ pub fn sprite_catalog_startup_system(
                 let material = TeamColorMaterial::get_team_hashmap(&image, &mut materials);
                 let mesh = meshes.add(create_simple_quad(
                     world_size,
-                    sprite_conf.sprite_info.offset,
+                    sprite_conf.sprite_info.sprite_offset,
                 ));
                 UnitVisualKind::Simple { mesh, material }
             }
@@ -81,7 +81,7 @@ pub fn sprite_catalog_startup_system(
                                 col,
                                 row,
                                 false,
-                                sprite_conf.sprite_info.offset,
+                                sprite_conf.sprite_info.sprite_offset,
                             ));
                             let flipped = meshes.add(create_atlas_quad(
                                 frame_size,
@@ -90,7 +90,7 @@ pub fn sprite_catalog_startup_system(
                                 col,
                                 row,
                                 true,
-                                sprite_conf.sprite_info.offset,
+                                sprite_conf.sprite_info.sprite_offset,
                             ));
                             mesh_vec.push(AnimationFrameMesh { normal, flipped });
                         }
@@ -114,7 +114,7 @@ pub fn sprite_catalog_startup_system(
             UnitVisual {
                 kind: visual_kind,
                 size: world_size,
-                world_offset: sprite_conf.sprite_info.world_offset,
+                model_offset: sprite_conf.sprite_info.model_offset,
                 anchor: sprite_conf.sprite_info.anchor,
                 roll_offset: sprite_conf.sprite_info.roll_offset_degrees.to_radians(),
             },
@@ -123,18 +123,16 @@ pub fn sprite_catalog_startup_system(
 }
 
 pub fn look_dir_system(
-    mut query: Query<(
-        &UnitMovement,
-        &mut AnimationState,
-        &mut Mesh3d,
-        &ThingType,
-        Option<&CurrentAnimation>,
-    )>,
-    catalog: Res<SpriteCatalog>,
+    mut commands: Commands,
+    parent_query: Query<(&UnitMovement, &ThingType, Option<&Team>), Changed<UnitMovement>>,
+    query: Query<(&ChildOf, &AnimationState, Entity)>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
-    query.iter_mut().for_each(
-        |(movement, mut anim_state, mut mesh, t_type, cur_anim_opt)| {
+    query.iter().for_each(
+        |(parent, anim_state, entity)| {
+            let Ok((movement, t_type, opt_team)) = parent_query.get(parent.0) else {
+                return;
+            };
             if movement.preferred_dir.length_squared() < f32::EPSILON {
                 return;
             }
@@ -152,121 +150,66 @@ pub fn look_dir_system(
             if delta.abs() < SWITCH_FACE_ANGLE {
                 return;
             }
-            anim_state.facing_oct = (angle / std::f32::consts::FRAC_PI_4)
+            let facing_oct = (angle / std::f32::consts::FRAC_PI_4)
                 .round()
                 .rem_euclid(8.0) as u32;
-            let (row, flip) = oct_to_row(anim_state.facing_oct);
-            if let Some(unit_visual) = catalog.sprites.get(t_type) {
-                if let UnitVisualKind::AnimationSet(animation_set) = &unit_visual.kind {
-                    if let Some(cur_anim) = cur_anim_opt {
-                        let data = animation_set
-                            .get(&cur_anim.0)
-                            .unwrap_or(animation_set.get(&AnimationKind::Stand).unwrap());
-                        *mesh = Mesh3d(if flip {
-                            data.frame_meshes
-                                [(anim_state.columns * row + anim_state.frame) as usize]
-                                .flipped
-                                .clone()
-                        } else {
-                            data.frame_meshes
-                                [(anim_state.columns * row + anim_state.frame) as usize]
-                                .normal
-                                .clone()
-                        });
-                    }
-                }
-            }
+            commands.trigger(ChangeVisualEvent {
+                visual_entity: entity,
+                facing_oct: Some(facing_oct),
+                t_type: *t_type,
+                team: opt_team.copied().unwrap_or(Team::Neutral),
+                animation_kind: None,
+            });
         },
     );
 }
 
 pub fn animation_system(
     time: Res<Time>,
-    mut query: Query<(
-        &mut AnimationState,
-        &mut Mesh3d,
-        &ThingType,
-        Option<&CurrentAnimation>,
-    )>,
+    query_parent: Query<&ThingType>,
+    mut query: Query<(&ChildOf, &mut AnimationState, &mut Mesh3d)>,
     catalog: Res<SpriteCatalog>,
 ) {
     query
         .iter_mut()
-        .for_each(|(mut anim_state, mut mesh, t_type, cur_anim_opt)| {
-            anim_state.timer.tick(time.delta());
-            if anim_state.timer.just_finished() {
-                anim_state.frame += 1;
-                if anim_state.frame >= anim_state.frame_count {
-                    anim_state.frame = 0;
-                }
-
-                let (row, flip) = oct_to_row(anim_state.facing_oct);
-                let index = (anim_state.columns * row + anim_state.frame) as usize;
-                if let Some(unit_sprite) = catalog.sprites.get(t_type) {
-                    if let UnitVisualKind::AnimationSet(animation_set) = &unit_sprite.kind {
-                        if let Some(cur_anim) = cur_anim_opt {
-                            let data = animation_set
-                                .get(&cur_anim.0)
-                                .unwrap_or(animation_set.get(&AnimationKind::Stand).unwrap());
-                            *mesh = Mesh3d(if flip {
-                                data.frame_meshes[index].flipped.clone()
-                            } else {
-                                data.frame_meshes[index].normal.clone()
-                            });
+        .for_each(|(parent, mut anim_state, mut mesh)| {
+            anim_state.tick(time.delta_secs());
+            if anim_state.mesh_dirty {
+                let t_type = query_parent.get(parent.0).expect("Parent entity does not have ThingType");
+                let Some(frame_mesh) = catalog.get_data(*t_type, anim_state.kind)
+                    .and_then(|data| {
+                        let (row, flip) = oct_to_row(anim_state.facing_oct);
+                        let index = (data.columns * row + anim_state.frame) as usize;
+                        if flip {
+                            data.frame_meshes.get(index).map(|frame| frame.flipped.clone())
+                        } else {
+                            data.frame_meshes.get(index).map(|frame| frame.normal.clone())
                         }
-                    }
-                }
+                    }) else {
+                        warn!("Animation data for ThingType {:?} and AnimationKind {:?} not found in catalog", t_type, anim_state.kind);
+                        return;
+                    };
+                *mesh = Mesh3d(frame_mesh);
+                anim_state.mesh_dirty = false;
             }
         });
 }
 
 pub fn change_animation_system(
     mut commands: Commands,
-    mut query: Query<
-        (
-            Entity,
-            &ThingType,
-            &CurrentAnimation,
-            Option<&AnimationState>,
-            &mut Mesh3d,
-            &mut MeshMaterial3d<TeamColorMaterial>,
-            Option<&Team>,
-        ),
-        Changed<CurrentAnimation>,
-    >,
-    catalog: Res<SpriteCatalog>,
+    query_parent: Query<(&CurrentAnimation, &ThingType, Option<&Team>), Changed<CurrentAnimation>>,
+    query: Query<(&ChildOf, Entity), With<Billboard>>,
 ) {
-    query.iter_mut().for_each(
-        |(entity, t_type, current_anim, opt_anim_state, mut mesh, mut material, team)| {
-            if let Some(unit_visual) = catalog.sprites.get(t_type) {
-                if let UnitVisualKind::AnimationSet(animation_set) = &unit_visual.kind {
-                    let data = animation_set
-                        .get(&current_anim.0)
-                        .unwrap_or(animation_set.get(&AnimationKind::Stand).unwrap());
-                    material.0 = data
-                        .material
-                        .get(&team.unwrap_or(&Team::Neutral))
-                        .expect("Material not found for team")
-                        .clone();
-
-                    let mut new_anim_state = AnimationState::from_data(data);
-                    if let Some(old_state) = opt_anim_state {
-                        new_anim_state.facing_oct = old_state.facing_oct;
-                        let (row, flip) = oct_to_row(new_anim_state.facing_oct);
-                        mesh.0 = if flip {
-                            data.frame_meshes[(data.columns * row) as usize]
-                                .flipped
-                                .clone()
-                        } else {
-                            data.frame_meshes[(data.columns * row) as usize]
-                                .normal
-                                .clone()
-                        };
-                    } else {
-                        mesh.0 = data.frame_meshes[0].normal.clone();
-                    }
-                    commands.entity(entity).insert(new_anim_state);
-                }
+    query.iter().for_each(
+        |(parent, entity)| {
+            if let Ok((cur_anim, t_type, opt_team)) = query_parent.get(parent.0) {
+                commands.trigger(ChangeVisualEvent {
+                    visual_entity: entity,
+                    facing_oct: None,
+                    t_type: *t_type,
+                    team: opt_team.copied().unwrap_or(Team::Neutral),
+                    animation_kind: Some(cur_anim.0),
+                });
             }
         },
     );
@@ -274,32 +217,34 @@ pub fn change_animation_system(
 
 pub fn update_cur_anim_system(
     mut query_moving: Query<
-        (&mut CurrentAnimation, Option<&Attack>),
+        (Option<&Attack>, &mut CurrentAnimation),
         (Or<(Added<Moving>, Changed<Attack>)>, Without<Stopped>),
     >,
     mut query_stopped: Query<
-        (&mut CurrentAnimation, &Stopped),
+        (&Stopped, &mut CurrentAnimation),
         (Changed<Stopped>, Without<Moving>),
     >,
 ) {
     query_moving
         .iter_mut()
-        .for_each(|(mut cur_anim, attack_opt)| {
+        .for_each(|(attack_opt, mut cur_anim)| {
             if let Some(attack) = attack_opt {
                 if attack.attacking && cur_anim.0 != AnimationKind::Attack {
                     *cur_anim = CurrentAnimation(AnimationKind::Attack);
                 }
                 return;
             }
-            *cur_anim = CurrentAnimation(AnimationKind::Move);
+            if cur_anim.0 != AnimationKind::Move {
+                *cur_anim = CurrentAnimation(AnimationKind::Move);
+            }
         });
 
     query_stopped
         .iter_mut()
-        .for_each(|(mut cur_anim, stopped)| {
-            if stopped.in_range {
+        .for_each(|(stopped, mut cur_anim)| {
+            if stopped.in_range && cur_anim.0 != AnimationKind::Stand {
                 *cur_anim = CurrentAnimation(AnimationKind::Stand);
-            } else {
+            } else if !stopped.in_range && cur_anim.0 != AnimationKind::Move {
                 *cur_anim = CurrentAnimation(AnimationKind::Move);
             }
         });

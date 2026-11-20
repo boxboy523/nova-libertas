@@ -17,27 +17,27 @@ use nova_libertas::{
     thing::ThingType,
 };
 
-fn visual(world_offset: Vec3) -> UnitVisual {
+fn visual(model_offset: Vec3) -> UnitVisual {
     UnitVisual {
         kind: UnitVisualKind::Simple {
             mesh: Handle::default(),
             material: [(Team::Neutral, Handle::default())].into_iter().collect(),
         },
         size: Vec2::splat(20.0),
-        world_offset,
+        model_offset,
         anchor: None,
         roll_offset: 0.0,
     }
 }
 
-fn attach_visual(world: &mut World, entity: Entity, world_offset: Vec3) {
+fn attach_visual(world: &mut World, entity: Entity, model_offset: Vec3) {
     world.run_system_once(move |mut commands: Commands| {
-        spawn_billboard(&mut commands, &visual(world_offset), entity, None);
+        spawn_billboard(&mut commands, &visual(model_offset), entity, None);
     }).unwrap();
 }
 
 #[test]
-fn unit_world_offset_is_world_aligned_and_does_not_accumulate() {
+fn unit_model_offset_is_world_aligned_and_does_not_accumulate() {
     let mut world = World::new();
     world.insert_resource(TerrainHeightMap {
         width: 4,
@@ -115,7 +115,7 @@ fn projectile_render_offset_does_not_change_flight_roll_or_arrival() {
 }
 
 #[test]
-fn static_wall_applies_world_offset_once_at_spawn() {
+fn static_wall_applies_model_offset_once_at_spawn() {
     let mut world = World::new();
     let offset = Vec3::new(3.0, 12.0, -5.0);
     let mut catalog = SpriteCatalog::default();
@@ -128,5 +128,5 @@ fn static_wall_applies_world_offset_once_at_spawn() {
     let mut query = world.query::<(&Transform, &Billboard)>();
     let (transform, billboard) = query.single(&world).unwrap();
     assert_eq!(transform.translation, Vec3::new(20.0, 0.0, 30.0) + offset);
-    assert_eq!(billboard.world_offset, offset);
+    assert_eq!(billboard.model_offset, offset);
 }

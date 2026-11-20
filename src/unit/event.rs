@@ -3,7 +3,7 @@ use crate::{
     movement::component::{Stopped, UnitMovement},
     thing::{ThingCatalog, ThingType},
     unit::component::{Position, Team},
-    visual::{data::{AnimationKind, CurrentAnimation}, SpriteCatalog},
+    visual::{SpriteCatalog, data::{AnimationKind, CurrentAnimation}},
     world3d::spawn_billboard,
 };
 use bevy::prelude::*;
@@ -51,6 +51,7 @@ pub fn spawn_units_trigger(
                 max: event.hp,
             },
             event.t_type,
+            CurrentAnimation(AnimationKind::Stand)
         ))
         .id();
     let Some(unit_visual) = sprite_catalog.sprites.get(&event.t_type) else {
@@ -60,13 +61,10 @@ pub fn spawn_units_trigger(
         );
         return;
     };
-    commands.entity(e).insert(Transform::from_translation(
-        Vec3::new(event.position.x, 0.0, event.position.y) + unit_visual.world_offset,
-    ));
     spawn_billboard(&mut commands, unit_visual, e, Some(event.team));
-    commands
-        .entity(e)
-        .insert(CurrentAnimation(AnimationKind::Stand));
+    commands.entity(e).insert(Transform::from_translation(
+        Vec3::new(event.position.x, 0.0, event.position.y)),
+    );
     if let Some(anchor) = unit_visual.anchor {
         commands.entity(e).insert(anchor);
     }
@@ -89,7 +87,7 @@ pub fn spawn_wall_trigger(
     };
 
     let transform = Transform::from_translation(
-        Vec3::new(event.position.x, 0.0, event.position.y) + visual.world_offset,
+        Vec3::new(event.position.x, 0.0, event.position.y)
     );
     commands.entity(e).insert((transform,));
     spawn_billboard(&mut commands, visual, e, None);

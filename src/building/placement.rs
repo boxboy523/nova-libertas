@@ -274,8 +274,7 @@ pub(super) fn update_placement(
     // Simple catalog quads are centered. Lift along camera-up so the bottom
     // of the image stays anchored to the footprint's ground center.
     let translation = Vec3::new(center.x, heights.height_at(center), center.y)
-        + camera_transform.up().as_vec3() * (visual.size.y * 0.5)
-        + visual.world_offset;
+        + camera_transform.up().as_vec3() * (visual.size.y * 0.5);
     commands.entity(session.ghost).insert((
         Visibility::Visible,
         Transform::from_translation(translation).with_rotation(camera_transform.rotation),
@@ -332,8 +331,7 @@ pub(super) fn update_building_transforms(
     for (position, thing_type, mut transform) in &mut buildings {
         if let Some(visual) = sprites.sprites.get(thing_type) {
             transform.translation = Vec3::new(position.x, heights.height_at(position.0), position.y)
-                + camera.up().as_vec3() * (visual.size.y * 0.5)
-                + visual.world_offset;
+                + camera.up().as_vec3() * (visual.size.y * 0.5);
         }
     }
 }
@@ -381,7 +379,7 @@ mod tests {
                 material: [(Team::Player, material)].into_iter().collect(),
             },
             size: Vec2::splat(60.0),
-            world_offset: Vec3::ZERO,
+            model_offset: Vec3::ZERO,
             anchor: None,
             roll_offset: 0.0,
         });
@@ -453,12 +451,12 @@ mod tests {
     }
 
     #[test]
-    fn world_offset_matches_preview_and_building_without_moving_footprint() {
+    fn model_offset_matches_preview_and_building_without_moving_footprint() {
         let offset = Vec3::new(3.0, 12.0, -5.0);
         let mut baseline = test_app();
         let mut shifted = test_app();
         shifted.world_mut().resource_mut::<SpriteCatalog>().sprites
-            .get_mut(&ThingType::SupplyStorage).unwrap().world_offset = offset;
+            .get_mut(&ThingType::SupplyStorage).unwrap().model_offset = offset;
         for app in [&mut baseline, &mut shifted] {
             aim_at_map_center(app);
             app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));

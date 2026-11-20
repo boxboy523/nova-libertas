@@ -43,8 +43,7 @@ pub fn position_to_transform_system(
     for (position, stats, billboard, mut transform) in query.iter_mut() {
         let height = height_map.height_at(**position);
         let ground_position = Vec3::new(position.x, height, position.y);
-        let world_offset = billboard.map_or(Vec3::ZERO, |billboard| billboard.world_offset);
-        transform.translation = ground_position - horizontal_up * stats.size + world_offset;
+        transform.translation = ground_position - horizontal_up * stats.size;
     }
 }
 

@@ -2,7 +2,7 @@ t_type = "AttackerCannon"
 [sprite_info]
 type = "animation_set"
 scale = 0.15
-offset = [0.0, -12.0]
+sprite_offset = [0.0, -12.0]
 
 [sprite_info.animations.stand]
 cell_size = [288, 288]
