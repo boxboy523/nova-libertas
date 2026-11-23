@@ -3,5 +3,5 @@ t_type = "ProjWinged"
 type = "simple"
 file = "projectile.png"
 scale = 0.15
-sprite_offset = [0.0, 128.0]
+sprite_offset = [0.0, 0.0]
 roll_offset_degrees = 180.0

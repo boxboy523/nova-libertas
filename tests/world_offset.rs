@@ -3,7 +3,7 @@ use std::time::Duration;
 use bevy::{ecs::system::RunSystemOnce, prelude::*};
 use nova_libertas::{
     combat::{
-        component::{AttackImpact, Projectile, ProjectilePosition},
+        component::{AttackImpact, Projectile},
         system::projectile_system,
     },
     map::TerrainHeightMap,
@@ -12,9 +12,9 @@ use nova_libertas::{
         event::{SpawnWallEvent, spawn_wall_trigger},
         system::position_to_transform_system,
     },
-    visual::{SpriteCatalog, UnitVisual, UnitVisualKind},
-    world3d::{Billboard, spawn_billboard},
     thing::ThingType,
+    visual::{SpriteCatalog, UnitVisual, UnitVisualKind, info::VisualAnchor},
+    world3d::{Billboard, spawn_billboard},
 };
 
 fn visual(model_offset: Vec3) -> UnitVisual {
@@ -30,10 +30,12 @@ fn visual(model_offset: Vec3) -> UnitVisual {
     }
 }
 
-fn attach_visual(world: &mut World, entity: Entity, model_offset: Vec3) {
-    world.run_system_once(move |mut commands: Commands| {
-        spawn_billboard(&mut commands, &visual(model_offset), entity, None);
-    }).unwrap();
+fn attach_visual(world: &mut World, parent: Entity, model_offset: Vec3) -> Entity {
+    world
+        .run_system_once(move |mut commands: Commands| {
+            spawn_billboard(&mut commands, &visual(model_offset), parent, None)
+        })
+        .unwrap()
 }
 
 #[test]
@@ -57,18 +59,26 @@ fn unit_model_offset_is_world_aligned_and_does_not_accumulate() {
             UnitStats { size: 5.0, max_speed: 10.0, acceleration: 10.0 },
             Transform::default(),
         )).id();
-        attach_visual(&mut world, entity, offset);
-        entity
+        let child = attach_visual(&mut world, entity, offset);
+        (entity, child)
     });
     for rotation in [Quat::from_rotation_x(-0.7), Quat::from_rotation_y(0.8) * Quat::from_rotation_x(-0.4)] {
         world.entity_mut(camera).insert(GlobalTransform::from(Transform::from_rotation(rotation)));
         for _ in 0..2 {
             world.run_system_cached(position_to_transform_system).unwrap();
-            let original = world.get::<Transform>(entities[0]).unwrap().translation;
-            let shifted = world.get::<Transform>(entities[1]).unwrap().translation;
-            assert!((shifted - original - offset).length() < 0.001);
-            for entity in entities {
-                assert_eq!(world.get::<Position>(entity).unwrap().0, position);
+            let [(base_parent, base_child), (shifted_parent, shifted_child)] = entities;
+            let base = world.get::<Transform>(base_parent).unwrap();
+            let shifted = world.get::<Transform>(shifted_parent).unwrap();
+            assert_eq!(base.translation, shifted.translation);
+            assert_eq!(base.translation.y, 7.0);
+
+            let base_local = world.get::<Transform>(base_child).unwrap().translation;
+            let shifted_local = world.get::<Transform>(shifted_child).unwrap().translation;
+            let actual_offset = shifted.transform_point(shifted_local) - base.transform_point(base_local);
+            assert!((actual_offset - offset).length() < 0.001);
+            for (parent, child) in entities {
+                assert_eq!(world.get::<Position>(parent).unwrap().0, position);
+                assert_eq!(world.get::<ChildOf>(child).unwrap().parent(), parent);
             }
         }
     }
@@ -81,7 +91,18 @@ fn projectile_render_offset_does_not_change_flight_roll_or_arrival() {
     time.advance_by(Duration::from_secs_f32(0.5));
     world.insert_resource(time);
     world.spawn((Camera3d::default(), GlobalTransform::default()));
-    let target = world.spawn(Position(Vec2::new(10.0, 0.0))).id();
+    let target = world
+        .spawn((
+            Position(Vec2::new(6.0, 0.0)),
+            Transform::from_xyz(99.0, 5.0, 99.0),
+            VisualAnchor {
+                hit: Vec2::new(0.0, 10.0),
+                ..default()
+            },
+        ))
+        .id();
+    let start = Vec3::new(0.0, 7.0, 0.0);
+    let direction = Vec3::new(0.6, 0.8, 0.0);
     let offset = Vec3::new(3.0, 12.0, -5.0);
     let projectiles = [Vec3::ZERO, offset].map(|offset| {
         let entity = world.spawn((
@@ -93,24 +114,34 @@ fn projectile_render_offset_does_not_change_flight_roll_or_arrival() {
                 impact: AttackImpact::Single,
                 team: Team::Neutral,
             },
-            ProjectilePosition(Vec3::ZERO),
-            Transform::from_translation(offset),
+            Transform::from_translation(start),
         )).id();
-        attach_visual(&mut world, entity, offset);
-        entity
+        let child = attach_visual(&mut world, entity, offset);
+        (entity, child)
     });
     for tick in 1..=4 {
         world.run_system_cached(projectile_system).unwrap();
-        for (entity, offset) in projectiles.into_iter().zip([Vec3::ZERO, offset]) {
-            let logical_position = world.get::<ProjectilePosition>(entity).unwrap().0;
-            assert_eq!(logical_position, Vec3::new(tick as f32 * 2.0, 0.0, 0.0));
-            assert_eq!(world.get::<Transform>(entity).unwrap().translation, logical_position + offset);
+        let expected_position = start + direction * (tick as f32 * 2.0);
+        for ((parent, child), offset) in projectiles.into_iter().zip([Vec3::ZERO, offset]) {
+            let position = world.get::<Transform>(parent).unwrap().translation;
+            assert!((position - expected_position).length() < 0.001);
+            assert_eq!(world.get::<Transform>(child).unwrap().translation, offset);
+            let roll = world.get::<Billboard>(child).unwrap().roll;
+            assert!((roll - direction.y.atan2(direction.x)).abs() < 0.001);
         }
-        assert_eq!(world.get::<Billboard>(projectiles[0]).unwrap().roll, world.get::<Billboard>(projectiles[1]).unwrap().roll);
     }
-    world.run_system_cached(projectile_system).unwrap();
-    for entity in projectiles {
-        assert!(world.get::<Projectile>(entity).is_none());
+    for _ in 0..2 {
+        // Allow one extra fixed tick if rounding puts distance just over the last step.
+        world.run_system_cached(projectile_system).unwrap();
+        let [first, second] = projectiles.map(|(parent, _)| world.get_entity(parent).is_ok());
+        assert_eq!(first, second, "render offset changed the arrival tick");
+        if !first {
+            break;
+        }
+    }
+    for (parent, child) in projectiles {
+        assert!(world.get_entity(parent).is_err());
+        assert!(world.get_entity(child).is_err());
     }
 }
 
@@ -125,8 +156,14 @@ fn static_wall_applies_model_offset_once_at_spawn() {
     let position = Vec2::new(20.0, 30.0);
     world.trigger(SpawnWallEvent { position });
     world.flush();
-    let mut query = world.query::<(&Transform, &Billboard)>();
-    let (transform, billboard) = query.single(&world).unwrap();
-    assert_eq!(transform.translation, Vec3::new(20.0, 0.0, 30.0) + offset);
-    assert_eq!(billboard.model_offset, offset);
+    let mut query = world.query_filtered::<(&ChildOf, &Transform), With<Billboard>>();
+    let (child_of, child_transform) = query.single(&world).unwrap();
+    let parent_transform = world.get::<Transform>(child_of.parent()).unwrap();
+    let expected_base = Vec3::new(20.0, 0.0, 30.0);
+    assert_eq!(parent_transform.translation, expected_base);
+    assert_eq!(child_transform.translation, offset);
+    assert_eq!(
+        parent_transform.transform_point(child_transform.translation),
+        expected_base + offset,
+    );
 }

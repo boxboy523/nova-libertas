@@ -96,6 +96,7 @@ pub fn attack_system(
         &mut UnitMovement,
         &UnitBattleStats,
         &Team,
+        &Transform,
         Option<&VisualAnchor>,
     )>,
     query_position: Query<&Position>,
@@ -104,7 +105,7 @@ pub fn attack_system(
 ) {
     let delta_time = time.delta_secs();
     attackers.iter_mut().for_each(
-        |(entity, mut attack, mut movement, battle_stats, team, opt_anchor)| {
+        |(entity, mut attack, mut movement, battle_stats, team, transform, opt_anchor)| {
             if attack.attacking == false {
                 return;
             }
@@ -160,7 +161,7 @@ pub fn attack_system(
                                     team: *team,
                                 },
                                 Transform::from_translation(
-                                    Vec3::new(position.x, anchor.muzzle.y, position.y),
+                                    Vec3::new(position.x, anchor.muzzle.y + transform.translation.y, position.y),
                                 ),
                             ))
                             .id();
@@ -176,19 +177,20 @@ pub fn attack_system(
 
 pub fn projectile_system(
     mut commands: Commands,
-    mut projectiles: Query<(Entity, &Projectile, &mut Transform, &mut Billboard)>,
-    query_target: Query<(&Position, Option<&VisualAnchor>)>,
+    mut projectiles: Query<(Entity, &Projectile, &mut Transform, Option<&Children>)>,
+    mut billboards: Query<&mut Billboard>,
+    query_target: Query<(&Position, &Transform, Option<&VisualAnchor>), Without<Projectile>>,
     time: Res<Time>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
     let delta_time = time.delta_secs();
     projectiles
         .iter_mut()
-        .for_each(|(entity, projectile, mut transform, mut billboard)| {
-            if let Ok((target_position, opt_anchor)) = query_target.get(projectile.target) {
+        .for_each(|(entity, projectile, mut transform, children_opt)| {
+            if let Ok((target_position, target_transform, opt_anchor)) = query_target.get(projectile.target) {
                 let anchor = opt_anchor.copied().unwrap_or_default();
                 let target_transform =
-                    Vec3::new(target_position.x, anchor.hit.y, target_position.y);
+                    Vec3::new(target_position.x, target_transform.translation.y + anchor.hit.y, target_position.y);
                 let offset = target_transform - transform.translation;
                 let screen_dir = Vec2::new(
                     offset.dot(camera.right().as_vec3()),
@@ -196,7 +198,13 @@ pub fn projectile_system(
                 )
                 .normalize_or_zero();
                 if screen_dir.length_squared() > f32::EPSILON {
-                    billboard.roll = screen_dir.to_angle();
+                    if let Some(children) = children_opt {
+                        children.iter().for_each(|child| {
+                            if let Ok(mut billboard) = billboards.get_mut(child) {
+                                billboard.roll = screen_dir.to_angle();
+                            }
+                        });
+                    }
                 }
                 let distance = offset.length();
                 let step = projectile.speed * delta_time;
