@@ -47,7 +47,7 @@ pub enum CollisionResult {
 #[derive(Resource, Debug)]
 pub struct SpatialGrid {
     pub cell_size: f32,
-    pub map_size: Vec2,
+    pub map_size: UVec2,
     pub width: usize,
     pub height: usize,
     pub obstacle_cells: Vec<Option<Vec<Obstacle>>>, // None for Wall Cells
@@ -61,9 +61,9 @@ impl SpatialGrid {
         let map = &flow_grid.map;
         let cell_size = flow_grid.cell_size;
         let mut grid = Self {
-            map_size: Vec2::new(
-                map.width as f32 * cell_size,
-                map.height as f32 * cell_size,
+            map_size: UVec2::new(
+                map.width as u32,
+                map.height as u32,
             ),
             cell_size,
             width: map.width,
@@ -392,7 +392,7 @@ mod tests {
         assert_ne!(grid.map_generation, 0);
         assert_eq!((grid.width, grid.height), (4, 3));
         assert_eq!(grid.cell_size, 20.0);
-        assert_eq!(grid.map_size, Vec2::new(80.0, 60.0));
+        assert_eq!(grid.map_size, UVec2::new(4, 3));
         assert!(grid.obstacle_cells[0].is_none());
         assert!(grid.obstacle_cells[11].is_none());
         assert_eq!(grid.obstacle_cells[5].as_ref().unwrap().len(), 2);
@@ -447,7 +447,7 @@ mod tests {
     fn test_grid() -> SpatialGrid {
         SpatialGrid {
             cell_size: 20.0,
-            map_size: Vec2::new(40.0, 20.0),
+            map_size: UVec2::new(2, 1),
             width: 2,
             height: 1,
             obstacle_cells: vec![None, Some(Vec::new())],

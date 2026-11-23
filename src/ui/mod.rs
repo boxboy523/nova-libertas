@@ -2,7 +2,7 @@ use crate::input::mouse_input;
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_hui::HuiSystems;
 
-mod components;
+pub mod components;
 pub mod events;
 mod systems;
 mod util;

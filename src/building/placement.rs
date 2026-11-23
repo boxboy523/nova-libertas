@@ -1,4 +1,4 @@
-use bevy::{camera::visibility::NoFrustumCulling, light::NotShadowCaster, mesh::VertexAttributeValues, prelude::*};
+use bevy::{camera::visibility::NoFrustumCulling, light::NotShadowCaster, prelude::*};
 use chunk_flow_field::{
     map::{EDGE_BOTTOM, EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, Obstacle},
     types::Cell,
@@ -10,63 +10,45 @@ use crate::{
     map::TerrainHeightMap,
     movement::flow_grid::FlowGrid,
     thing::{ThingCatalog, ThingType},
-    unit::{component::{Position, Team}, spatial_grid::{EntityInfo, SpatialGrid}},
+    ui::components::BlockWorldInput,
+    unit::{component::{Position, Team}, spatial_grid::SpatialGrid},
     util::{circle_rect_overlap, footprint_center, screen_to_world, snapped_origin},
     visual::{SpriteCatalog, team_color::TeamColorMaterial},
     world3d::spawn_billboard,
 };
 
-#[derive(Event)]
-pub struct BeginBuildingPlacement(pub ThingType);
-
-#[derive(Resource, Default)]
-pub struct BuildingPlacementState {
-    active: Option<PlacementSession>,
-    // Keep ownership of the final click/cancel gesture through its release frame.
-    block_world_input: bool,
-}
-
-impl BuildingPlacementState {
-    pub fn blocks_world_input(&self) -> bool {
-        self.block_world_input || self.active.is_some()
-    }
-}
-
-struct PlacementSession {
+#[derive(Debug, Clone, Component)]
+pub(super) struct PlacementSession {
     thing_type: ThingType,
     size: UVec2,
-    ghost: Entity,
-    cells: Vec<Entity>,
-    cell_meshes: Vec<Handle<Mesh>>,
-    // Ghost, valid-cell and invalid-cell materials; never mutate catalog materials.
-    materials: [Handle<StandardMaterial>; 3],
-    armed: bool,
+    ready: bool,
 }
 
-impl PlacementSession {
-    fn cleanup(
-        self,
-        commands: &mut Commands,
-        meshes: &mut Assets<Mesh>,
-        materials: &mut Assets<StandardMaterial>,
-    ) {
-        commands.entity(self.ghost).despawn();
-        for entity in self.cells {
-            commands.entity(entity).despawn();
-        }
-        for mesh in self.cell_meshes {
-            meshes.remove(mesh.id());
-        }
-        for material in self.materials {
-            materials.remove(material.id());
-        }
-    }
+#[derive(Debug, Clone, Component)]
+struct Ghost;
+
+#[derive(Debug, Clone, Component)]
+pub(super) struct CellContainer {
+    size: IVec2,
+    grid_pos: IVec2,
 }
+
+#[derive(Debug, Clone, Component)]
+pub(super) struct CellOverlay {
+    green: Handle<StandardMaterial>,
+    red: Handle<StandardMaterial>,
+    valid: bool,
+}
+
+#[derive(Debug, Clone, Component)]
+pub(super) struct IsPlacementSession;
+
+#[derive(Event)]
+pub struct BeginBuildingPlacement(pub ThingType);
 
 pub(super) fn begin_placement(
     event: On<BeginBuildingPlacement>,
     mut commands: Commands,
-    mut state: ResMut<BuildingPlacementState>,
     catalog: Res<ThingCatalog>,
     sprites: Res<SpriteCatalog>,
     team_materials: Res<Assets<TeamColorMaterial>>,
@@ -74,7 +56,8 @@ pub(super) fn begin_placement(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let Some(stats) = catalog.get_info(event.0).and_then(|info| info.building_stats) else {
+    let building_type = event.0;
+    let Some(stats) = catalog.get_info(building_type).and_then(|info| info.building_stats) else {
         warn!("No building configuration for {:?}", event.0);
         return;
     };
@@ -85,6 +68,17 @@ pub(super) fn begin_placement(
         warn!("Building footprint does not fit this map: {:?}", stats.size);
         return;
     }
+    let session = commands.spawn((
+        PlacementSession {
+            thing_type: building_type,
+            size: stats.size,
+            ready: false,
+        },
+        Visibility::Hidden,
+        BlockWorldInput,
+        IsPlacementSession,
+        Transform::default(),
+    )).id();
     let Some(visual) = sprites.sprites.get(&event.0) else {
         return;
     };
@@ -100,48 +94,57 @@ pub(super) fn begin_placement(
         cull_mode: None,
         ..default()
     });
-    let green = materials.add(cell_material(Color::srgba(0.1, 1.0, 0.2, 0.4)));
-    let red = materials.add(cell_material(Color::srgba(1.0, 0.1, 0.1, 0.4)));
-    if let Some(old) = state.active.take() {
-        old.cleanup(&mut commands, &mut meshes, &mut materials);
-    }
-    let ghost = commands.spawn((
+    // spawn building ghost ui
+    commands.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(ghost_material.clone()),
-        Transform::default(),
-        Visibility::Hidden,
+        Transform::from_translation(visual.model_offset),
         Pickable::IGNORE,
+        Visibility::Inherited,
         NotShadowCaster,
+        Ghost,
+        ChildOf(session),
+    ));
+    let green = materials.add(cell_material(Color::srgba(0.1, 1.0, 0.2, 0.4)));
+    let red = materials.add(cell_material(Color::srgba(1.0, 0.1, 0.1, 0.4)));
+    let cell_transform = Transform::from_translation(Vec3::new(
+        (stats.size.x - 1) as f32 * flow_grid.cell_size * -0.5,
+        0.6,
+        (stats.size.y - 1) as f32 * flow_grid.cell_size * -0.5,
+    ));
+    let cell_container = commands.spawn((
+        Visibility::Inherited,
+        CellContainer { size: stats.size.as_ivec2(), grid_pos: IVec2::ZERO },
+        ChildOf(session),
+        cell_transform,
     )).id();
     let mut cells = Vec::new();
     let mut cell_meshes = Vec::new();
-    for _ in 0..stats.size.x * stats.size.y {
+    for index in 0..stats.size.x * stats.size.y {
         let mesh = meshes.add(Plane3d::default().mesh().size(
             flow_grid.cell_size * 0.96,
             flow_grid.cell_size * 0.96,
         ));
+        let cell_pos = IVec2::new(index as i32 % stats.size.x as i32, index as i32 / stats.size.x as i32);
+        let transform = Transform::from_translation(Vec3::new(
+            cell_pos.x as f32 * flow_grid.cell_size,
+            0.0,
+            cell_pos.y as f32 * flow_grid.cell_size,
+        ));
         cells.push(commands.spawn((
             Mesh3d(mesh.clone()),
             MeshMaterial3d(red.clone()),
-            Transform::default(),
-            Visibility::Hidden,
+            transform,
+            Visibility::Inherited,
             Pickable::IGNORE,
             NotShadowCaster,
             // Vertices follow terrain heights after the mesh's initial AABB is computed.
             NoFrustumCulling,
+            ChildOf(cell_container),
+            CellOverlay { green: green.clone(), red: red.clone(), valid: false },
         )).id());
         cell_meshes.push(mesh);
     }
-    state.active = Some(PlacementSession {
-        thing_type: event.0,
-        size: stats.size,
-        ghost,
-        cells,
-        cell_meshes,
-        materials: [ghost_material, green, red],
-        armed: false,
-    });
-    state.block_world_input = true;
 }
 
 fn cell_material(color: Color) -> StandardMaterial {
@@ -154,35 +157,70 @@ fn cell_material(color: Color) -> StandardMaterial {
     }
 }
 
-/// Check terrain and per-cell circle overlap against nearby spatial-index candidates.
-fn valid_cells(
-    flow: &FlowGrid,
-    origin: IVec2,
-    size: UVec2,
-    terrain_size: Vec2,
-    units: &[EntityInfo],
-) -> Vec<bool> {
-    let mut valid = Vec::with_capacity((size.x * size.y) as usize);
-    for dy in 0..size.y {
-        for dx in 0..size.x {
-            let cell = origin + IVec2::new(dx as i32, dy as i32);
-            let min = cell.as_vec2() * flow.cell_size;
-            let max = min + Vec2::splat(flow.cell_size);
-            let in_bounds = cell.x >= 0 && cell.y >= 0
-                && (cell.x as usize) < flow.map.width
-                && (cell.y as usize) < flow.map.height
-                && max.x <= terrain_size.x && max.y <= terrain_size.y;
-            let free = in_bounds
-                && !matches!(flow.map.get_cell(cell.x as usize, cell.y as usize), Cell::Wall)
-                && flow.map.can_pass(cell.x as usize, cell.y as usize,
-                    EDGE_TOP | EDGE_RIGHT | EDGE_BOTTOM | EDGE_LEFT)
-                && !units.iter().any(|unit| {
-                    circle_rect_overlap(unit.pos, unit.radius, min, max)
-                });
-            valid.push(free);
-        }
-    }
-    valid
+pub(super) fn cell_system(
+    mut cell: Query<(&CellOverlay, &mut MeshMaterial3d<StandardMaterial>)>,
+) {
+    cell.iter_mut().for_each(|(overlay, mut material)| {
+        material.0 = if overlay.valid { overlay.green.clone() } else { overlay.red.clone() };
+    });
+}
+
+pub(super) fn cell_validate_system(
+    cell_container: Query<(&CellContainer, &Children)>,
+    mut cells: Query<&mut CellOverlay>,
+    flow_grid: Res<FlowGrid>,
+    spatial_grid: Res<SpatialGrid>,
+    heights: Res<TerrainHeightMap>,
+) {
+    let map_cells = spatial_grid.map_size.as_ivec2();
+    let cell_size = flow_grid.cell_size;
+    let map_max = (map_cells.as_vec2() * cell_size).map(f32::next_down);
+    let terrain_size = Vec2::new(
+        heights.width.saturating_sub(1) as f32,
+        heights.height.saturating_sub(1) as f32,
+    ) * heights.sample_spacing;
+    cell_container.iter().for_each(|(container, children)| {
+        let query_min = (container.grid_pos.as_vec2() * cell_size).clamp(Vec2::ZERO, map_max);
+        let query_max = ((container.grid_pos + container.size).as_vec2() * cell_size)
+            .clamp(Vec2::ZERO, map_max);
+        let Ok(candidates) = spatial_grid.query_entities_rect(
+            query_min,
+            query_max,
+            false,
+        ) else {
+            warn!("Spatial query failed for footprint at {:?}", container.grid_pos);
+            // Confirmation must not reuse valid flags from a previous frame.
+            for child in children.iter() {
+                if let Ok(mut overlay) = cells.get_mut(child) {
+                    overlay.valid = false;
+                }
+            }
+            return;
+        };
+        children.iter().enumerate().for_each(|(index, child)| {
+            let cell_pos = IVec2::new(index as i32 % container.size.x, index as i32 / container.size.x);
+            let grid_pos = container.grid_pos + cell_pos;
+            if let Ok(mut overlay) = cells.get_mut(child) {
+                let cell_min = grid_pos.as_vec2() * cell_size;
+                let cell_max = cell_min + Vec2::splat(cell_size);
+                if grid_pos.x < 0 || grid_pos.y < 0
+                    || grid_pos.x >= map_cells.x || grid_pos.y >= map_cells.y
+                    || cell_max.x > terrain_size.x || cell_max.y > terrain_size.y
+                {
+                    overlay.valid = false;
+                    return;
+                }
+                overlay.valid = flow_grid.map.can_pass(
+                    grid_pos.x as usize,
+                    grid_pos.y as usize,
+                    EDGE_TOP | EDGE_RIGHT | EDGE_BOTTOM | EDGE_LEFT,
+                ) && !matches!(flow_grid.map.get_cell(grid_pos.x as usize, grid_pos.y as usize), Cell::Wall)
+                    && candidates.iter().all(|unit| {
+                        !circle_rect_overlap(unit.pos, unit.radius, cell_min, cell_max)
+                    })
+            }
+        });
+    });
 }
 
 fn register_footprint(
@@ -204,36 +242,42 @@ fn register_footprint(
     flow.map.add_building(obstacle)
 }
 
+pub(super) fn finish_placement(
+    mut commands: Commands,
+    buttons: Res<ButtonInput<MouseButton>>,
+    query: Query<Entity, (With<BlockWorldInput>, With<IsPlacementSession>, Without<PlacementSession>)>,
+) {
+    let mouse_busy = [MouseButton::Left, MouseButton::Right]
+    .into_iter()
+    .any(|button| buttons.pressed(button) || buttons.just_released(button));
+
+    if mouse_busy {
+        return;
+    }
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
 pub(super) fn update_placement(
     mut commands: Commands,
-    mut state: ResMut<BuildingPlacementState>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     capture: Res<UiInputCapture>,
     window: Single<&Window>,
     camera: Single<(&Camera, &Transform), With<Camera3d>>,
-    mut flow: ResMut<FlowGrid>,
-    mut spatial: ResMut<SpatialGrid>,
+    session: Single<(Entity, &mut Transform, &mut PlacementSession), Without<Camera3d>>,
+    mut container: Single<&mut CellContainer>,
+    flow: Res<FlowGrid>,
     heights: Res<TerrainHeightMap>,
-    sprites: Res<SpriteCatalog>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let Some(mut session) = state.active.take() else {
-        if !buttons.pressed(MouseButton::Left) && !buttons.pressed(MouseButton::Right)
-            && !buttons.just_released(MouseButton::Left) && !buttons.just_released(MouseButton::Right)
-        {
-            state.block_world_input = false;
-        }
-        return;
-    };
-    state.block_world_input = true;
+    let (entity, mut transform, mut session) = session.into_inner();
     if keys.just_pressed(KeyCode::Escape) || buttons.just_pressed(MouseButton::Right) {
-        session.cleanup(&mut commands, &mut meshes, &mut materials);
+        commands.entity(entity).despawn_children().remove::<PlacementSession>();
         return;
     }
     if !buttons.pressed(MouseButton::Left) && !buttons.just_released(MouseButton::Left) {
-        session.armed = true;
+        session.ready = true;
     }
     let (camera, camera_transform) = *camera;
     // The root camera's Transform includes this frame's camera motion; do not
@@ -243,83 +287,65 @@ pub(super) fn update_placement(
         .filter(|_| !capture.pointer_over_ui)
         .and_then(|cursor| screen_to_world(camera, &camera_global, &heights, cursor));
     let Some(hit) = hit else {
-        for entity in std::iter::once(session.ghost).chain(session.cells.iter().copied()) {
-            commands.entity(entity).insert(Visibility::Hidden);
-        }
-        state.active = Some(session);
+        commands.entity(entity).insert(Visibility::Hidden);
         return;
     };
+    commands.entity(entity).insert(Visibility::Visible);
     let origin = snapped_origin(Vec2::new(hit.x, hit.z), session.size, flow.cell_size);
     let center = footprint_center(origin, session.size, flow.cell_size);
-    // Query once for the whole footprint. The grid expands its bucket search by
-    // max_unit_radius_cells and filters candidates with circle_rect_overlap.
-    // Clip only the query; valid_cells still rejects out-of-bounds footprint cells.
-    let grid_max = Vec2::new(spatial.map_size.x.next_down(), spatial.map_size.y.next_down());
-    let query_min = (origin.as_vec2() * flow.cell_size).clamp(Vec2::ZERO, grid_max);
-    let query_max = ((origin.as_vec2() + session.size.as_vec2()) * flow.cell_size)
-        .clamp(Vec2::ZERO, grid_max);
-    let candidates = spatial.query_entities_rect(query_min, query_max, false);
-    let terrain_size = Vec2::new(
-        heights.width.saturating_sub(1) as f32 * heights.sample_spacing,
-        heights.height.saturating_sub(1) as f32 * heights.sample_spacing,
-    );
-    let valid = match candidates {
-        Ok(candidates) => valid_cells(&flow, origin, session.size, terrain_size, &candidates),
+    transform.translation = Vec3::new(center.x, hit.y, center.y);
+    container.grid_pos = origin;
+}
+
+pub(super) fn confirm_placement(
+    mut commands: Commands,
+    buttons: Res<ButtonInput<MouseButton>>,
+    capture: Res<UiInputCapture>,
+    session: Single<(Entity, &PlacementSession, &Transform, &Visibility)>,
+    container: Single<&CellContainer>,
+    cells: Query<&CellOverlay>,
+    sprites: Res<SpriteCatalog>,
+    mut flow: ResMut<FlowGrid>,
+    mut spatial: ResMut<SpatialGrid>,
+) {
+    let (root, session, transform, visibility) = session.into_inner();
+    if !session.ready
+        || !buttons.just_pressed(MouseButton::Left)
+        || capture.left_captured
+        || *visibility != Visibility::Visible
+    {
+        return;
+    }
+
+    if cells.is_empty() || cells.iter().any(|cell| !cell.valid) {
+        return;
+    }
+
+    let Some(visual) = sprites.sprites.get(&session.thing_type) else {
+        return;
+    };
+    let origin = container.grid_pos;
+    let center = footprint_center(origin, session.size, flow.cell_size);
+    let id = match register_footprint(&mut flow, origin, session.size) {
+        Ok(id) => id,
         Err(error) => {
-            warn!("Building candidate query failed: {error}");
-            vec![false; (session.size.x * session.size.y) as usize]
+            warn!("Building placement rejected: {error}");
+            return;
         }
     };
-    let visual = &sprites.sprites[&session.thing_type];
-    // Simple catalog quads are centered. Lift along camera-up so the bottom
-    // of the image stays anchored to the footprint's ground center.
-    let translation = Vec3::new(center.x, heights.height_at(center), center.y)
-        + camera_transform.up().as_vec3() * (visual.size.y * 0.5);
-    commands.entity(session.ghost).insert((
-        Visibility::Visible,
-        Transform::from_translation(translation).with_rotation(camera_transform.rotation),
-    ));
-    for (index, &entity) in session.cells.iter().enumerate() {
-        let cell = origin + IVec2::new(
-            index as i32 % session.size.x as i32,
-            index as i32 / session.size.x as i32,
-        );
-        let center = footprint_center(cell, UVec2::ONE, flow.cell_size);
-        if let Some(mut mesh) = meshes.get_mut(&session.cell_meshes[index]) {
-            if let Some(VertexAttributeValues::Float32x3(vertices)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) {
-                for vertex in vertices {
-                    vertex[1] = heights.height_at(center + Vec2::new(vertex[0], vertex[2])) + 0.6;
-                }
-            }
-        }
-        commands.entity(entity).insert((
-            Visibility::Visible,
-            Transform::from_xyz(center.x, 0.0, center.y),
-            MeshMaterial3d(session.materials[if valid[index] { 1 } else { 2 }].clone()),
-        ));
-    }
-    if session.armed && buttons.just_pressed(MouseButton::Left)
-        && !capture.left_captured && valid.iter().all(|&cell| cell)
-    {
-        // This check and registration use the same current resources in one system.
-        match register_footprint(&mut flow, origin, session.size) {
-            Ok(id) => {
-                let entity = commands.spawn((
-                    Building { id, size: session.size },
-                    session.thing_type,
-                    Position(center),
-                    Team::Player,
-                    Transform::from_translation(translation),
-                )).id();
-                spawn_billboard(&mut commands, visual, entity, Some(Team::Player));
-                spatial.update(&flow);
-                session.cleanup(&mut commands, &mut meshes, &mut materials);
-                return;
-            }
-            Err(error) => warn!("Building placement rejected: {error}"),
-        }
-    }
-    state.active = Some(session);
+
+    let building = commands
+        .spawn((
+            Building { id, size: session.size },
+            session.thing_type,
+            Position(center),
+            Team::Player,
+            Transform::from_translation(transform.translation),
+        ))
+        .id();
+    spawn_billboard(&mut commands, visual, building, Some(Team::Player));
+    spatial.update(&flow);
+    commands.entity(root).despawn_children().remove::<PlacementSession>();
 }
 
 pub(super) fn update_building_transforms(
@@ -403,6 +429,20 @@ mod tests {
         app
     }
 
+    fn entities_with<T: Component>(app: &mut App) -> Vec<Entity> {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<T>>().iter(world).collect()
+    }
+
+    fn preview_cells(world: &World, root: Entity) -> &Children {
+        let children = world.get::<Children>(root).unwrap();
+        let container = children
+            .iter()
+            .find(|&child| world.get::<CellContainer>(child).is_some())
+            .unwrap();
+        world.get::<Children>(container).unwrap()
+    }
+
     #[test]
     fn placement_can_occupy_last_row_and_column_of_grid() {
         let mut app = test_app();
@@ -415,7 +455,7 @@ mod tests {
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
-        assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
+        assert!(entities_with::<PlacementSession>(&mut app).is_empty());
         let world = app.world_mut();
         let mut buildings = world.query::<(&Building, &Position)>();
         let (building, position) = buildings.single(world).unwrap();
@@ -462,30 +502,40 @@ mod tests {
             app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
             app.update();
         }
-        let ghost_transform = |app: &App| {
-            let session = app.world().resource::<BuildingPlacementState>().active.as_ref().unwrap();
-            *app.world().get::<Transform>(session.ghost).unwrap()
+        let ghost_transform = |app: &mut App| {
+            let [ghost] = entities_with::<Ghost>(app)[..] else {
+                panic!("expected one preview ghost");
+            };
+            *app.world().get::<Transform>(ghost).unwrap()
         };
-        let original = ghost_transform(&baseline);
-        let translated = ghost_transform(&shifted);
+        let original = ghost_transform(&mut baseline);
+        let translated = ghost_transform(&mut shifted);
         assert!((translated.translation - original.translation - offset).length() < 0.001);
         assert_eq!(translated.rotation, original.rotation);
-        // Cell overlays are gameplay footprint indicators, not part of the sprite.
-        let cell_positions = |app: &App| {
-            app.world().resource::<BuildingPlacementState>().active.as_ref().unwrap().cells
-                .iter().map(|&cell| app.world().get::<Transform>(cell).unwrap().translation)
+        // Cell overlays indicate the gameplay footprint, independently of the ghost.
+        let cell_positions = |app: &mut App| {
+            let root = entities_with::<PlacementSession>(app)[0];
+            let world = app.world();
+            preview_cells(world, root)
+                .iter()
+                .map(|cell| world.get::<Transform>(cell).unwrap().translation)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(cell_positions(&baseline), cell_positions(&shifted));
+        assert_eq!(cell_positions(&mut baseline), cell_positions(&mut shifted));
         for app in [&mut baseline, &mut shifted] {
             app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
             app.update();
         }
         let installed = |app: &mut App| {
             let world = app.world_mut();
-            let mut query = world.query::<(&Building, &Position, &Transform)>();
-            let (building, position, transform) = query.single(world).unwrap();
-            (building.size, position.0, transform.translation)
+            let mut query = world.query::<(&Building, &Position, &Transform, &Children)>();
+            let (building, position, parent, children) = query.single(world).unwrap();
+            let billboard = children
+                .iter()
+                .find(|&child| world.get::<crate::world3d::Billboard>(child).is_some())
+                .unwrap();
+            let local = world.get::<Transform>(billboard).unwrap().translation;
+            (building.size, position.0, parent.transform_point(local))
         };
         let original = installed(&mut baseline);
         let translated = installed(&mut shifted);
@@ -521,8 +571,10 @@ mod tests {
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
 
-        assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
-        assert!(app.world().resource::<BuildingPlacementState>().blocks_world_input());
+        assert!(entities_with::<PlacementSession>(&mut app).is_empty());
+        assert_eq!(entities_with::<BlockWorldInput>(&mut app).len(), 1);
+        assert!(entities_with::<Ghost>(&mut app).is_empty());
+        assert!(entities_with::<CellOverlay>(&mut app).is_empty());
         let world = app.world_mut();
         let mut buildings = world.query::<(&Building, &ThingType, &Position)>();
         let (building, kind, position) = buildings.single(world).unwrap();
@@ -537,8 +589,6 @@ mod tests {
                 assert!(spatial.obstacle_cells[y * 8 + x].is_none());
             }
         }
-        assert_eq!(world.resource::<Assets<StandardMaterial>>().len(), 0);
-        assert_eq!(world.resource::<Assets<Mesh>>().len(), 1);
     }
 
     #[test]
@@ -553,10 +603,12 @@ mod tests {
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
-        let state = app.world().resource::<BuildingPlacementState>();
-        let session = state.active.as_ref().unwrap();
-        let red = &session.materials[2];
-        assert_eq!(&app.world().get::<MeshMaterial3d<StandardMaterial>>(session.cells[3]).unwrap().0, red);
+        let root = entities_with::<PlacementSession>(&mut app)[0];
+        let world = app.world();
+        let cell = preview_cells(world, root).iter().nth(3).unwrap();
+        let overlay = world.get::<CellOverlay>(cell).unwrap();
+        assert!(!overlay.valid);
+        assert_eq!(world.get::<MeshMaterial3d<StandardMaterial>>(cell).unwrap().0, overlay.red);
         assert_eq!(app.world().resource::<FlowGrid>().map.get_generation(), 0);
     }
 
@@ -572,7 +624,7 @@ mod tests {
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
-        assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
+        assert!(entities_with::<PlacementSession>(&mut app).is_empty());
         let world = app.world_mut();
         assert_eq!(world.query::<&Building>().iter(world).count(), 1);
     }
@@ -590,9 +642,8 @@ mod tests {
         app.world_mut().resource_mut::<UiInputCapture>().pointer_over_ui = true;
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
-        let state = app.world().resource::<BuildingPlacementState>();
-        let session = state.active.as_ref().unwrap();
-        assert_eq!(*app.world().get::<Visibility>(session.ghost).unwrap(), Visibility::Hidden);
+        let root = entities_with::<PlacementSession>(&mut app)[0];
+        assert_eq!(*app.world().get::<Visibility>(root).unwrap(), Visibility::Hidden);
         assert_eq!(app.world().resource::<FlowGrid>().map.get_generation(), 0);
     }
 
@@ -601,19 +652,68 @@ mod tests {
         let mut app = test_app();
         app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
         app.world_mut().flush();
-        assert!(app.world().resource::<BuildingPlacementState>().blocks_world_input());
-        assert_eq!(app.world().resource::<Assets<StandardMaterial>>().len(), 3);
-        // One catalog mesh plus the four cells of the configured 2x2 footprint.
-        assert_eq!(app.world().resource::<Assets<Mesh>>().len(), 5);
+        let root = entities_with::<PlacementSession>(&mut app)[0];
+        assert!(app.world().get::<BlockWorldInput>(root).is_some());
+        assert_eq!(preview_cells(app.world(), root).len(), 4);
+
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Right);
         app.update();
-        assert!(app.world().resource::<BuildingPlacementState>().active.is_none());
-        assert!(app.world().resource::<BuildingPlacementState>().blocks_world_input());
-        assert_eq!(app.world().resource::<Assets<StandardMaterial>>().len(), 0);
-        assert_eq!(app.world().resource::<Assets<Mesh>>().len(), 1);
-        app.world_mut().resource_mut::<ButtonInput<MouseButton>>().reset_all();
+        assert!(app.world().get::<PlacementSession>(root).is_none());
+        assert!(app.world().get::<BlockWorldInput>(root).is_some());
+        assert!(entities_with::<Ghost>(&mut app).is_empty());
+        assert!(entities_with::<CellOverlay>(&mut app).is_empty());
+
         app.update();
-        assert!(!app.world().resource::<BuildingPlacementState>().blocks_world_input());
+        assert!(app.world().get::<BlockWorldInput>(root).is_some());
+        app.world_mut().resource_mut::<ButtonInput<MouseButton>>().release(MouseButton::Right);
+        app.update();
+        assert!(app.world().get::<BlockWorldInput>(root).is_some());
+        app.world_mut().resource_mut::<ButtonInput<MouseButton>>().clear();
+        app.update();
+        assert!(app.world().get_entity(root).is_err());
+    }
+
+    #[test]
+    fn escape_releases_world_input_without_a_mouse_event() {
+        let mut app = test_app();
+        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().flush();
+        let root = entities_with::<PlacementSession>(&mut app)[0];
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::Escape);
+        app.update();
+        assert!(app.world().get::<PlacementSession>(root).is_none());
+        assert!(app.world().get::<BlockWorldInput>(root).is_some());
+        app.update();
+        assert!(app.world().get_entity(root).is_err());
+    }
+
+    #[test]
+    fn click_checks_cells_at_the_current_cursor_position() {
+        let mut app = test_app();
+        aim_at_map_center(&mut app);
+        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.update();
+        let root = entities_with::<PlacementSession>(&mut app)[0];
+        assert!(preview_cells(app.world(), root)
+            .iter()
+            .all(|cell| app.world().get::<CellOverlay>(cell).unwrap().valid));
+
+        // Move the cursor hit and click in the same frame. Only the new footprint overlaps.
+        let world = app.world_mut();
+        let mut cameras = world.query_filtered::<&mut Transform, With<Camera3d>>();
+        *cameras.single_mut(world).unwrap() = Transform::from_xyz(110.0, 100.0, 70.0)
+            .looking_at(Vec3::new(110.0, 0.0, 70.0), Vec3::NEG_Z);
+        let position = Vec2::new(110.0, 70.0);
+        let unit = world.spawn(Position(position)).id();
+        world.resource_mut::<SpatialGrid>().add_entity(unit, position, 3.0).unwrap();
+        world.resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
+        app.update();
+
+        assert!(app.world().get::<PlacementSession>(root).is_some());
+        assert!(preview_cells(app.world(), root)
+            .iter()
+            .any(|cell| !app.world().get::<CellOverlay>(cell).unwrap().valid));
+        assert!(entities_with::<Building>(&mut app).is_empty());
     }
 
     #[test]
@@ -639,34 +739,66 @@ mod tests {
         assert_eq!(footprint_center(origin, size, 20.0), Vec2::new(50.0, 70.0));
     }
 
+    fn validate_footprint(world: &mut World, origin: IVec2, size: IVec2) -> Vec<bool> {
+        let container = world.spawn(CellContainer { size, grid_pos: origin }).id();
+        let overlays: Vec<_> = (0..size.x * size.y)
+            .map(|_| {
+                world.spawn((
+                    CellOverlay { green: Handle::default(), red: Handle::default(), valid: false },
+                    ChildOf(container),
+                )).id()
+            })
+            .collect();
+        world.run_system_cached(cell_validate_system).unwrap();
+        let valid = overlays
+            .iter()
+            .map(|&cell| world.get::<CellOverlay>(cell).unwrap().valid)
+            .collect();
+        world.despawn(container);
+        valid
+    }
+
     #[test]
     fn validates_each_cell_and_unit_radius_not_just_unit_center() {
-        let flow = flow();
-        let valid = valid_cells(&flow, IVec2::ONE, UVec2::splat(3), Vec2::splat(140.0), &[]);
-        assert_eq!(valid, vec![true; 9]);
-        let candidates = [EntityInfo { entity: Entity::from_bits(1), pos: Vec2::new(18.0, 30.0), radius: 3.0 }];
-        let valid = valid_cells(&flow, IVec2::ONE, UVec2::splat(3), Vec2::splat(140.0), &candidates);
+        let mut app = test_app();
+        let world = app.world_mut();
+        assert_eq!(validate_footprint(world, IVec2::ONE, IVec2::splat(3)), vec![true; 9]);
+        assert_eq!(validate_footprint(world, IVec2::new(-1, 0), IVec2::splat(2)),
+            vec![false, true, false, true]);
+        let unit = world.spawn_empty().id();
+        world.resource_mut::<SpatialGrid>().add_entity(unit, Vec2::new(18.0, 30.0), 3.0).unwrap();
+        let valid = validate_footprint(world, IVec2::ONE, IVec2::splat(3));
         assert!(!valid[0]);
         assert!(valid[1..].iter().all(|&v| v));
-        assert!(valid_cells(&flow, IVec2::new(-1, 0), UVec2::ONE, Vec2::splat(140.0), &[]).iter().all(|&v| !v));
-        // Last navigation cell lies beyond the rendered terrain extent.
-        assert_eq!(valid_cells(&flow, IVec2::new(7, 0), UVec2::ONE, Vec2::splat(140.0), &[]), vec![false]);
+    }
+
+    #[test]
+    fn rejects_cells_beyond_rendered_terrain() {
+        let mut app = test_app();
+        let world = app.world_mut();
+        // The last navigation column lies beyond the rendered terrain extent.
+        let mut heights = world.resource_mut::<TerrainHeightMap>();
+        heights.width = 8;
+        heights.heights = vec![0.0; heights.width * heights.height];
+        assert_eq!(validate_footprint(world, IVec2::new(7, 0), IVec2::ONE), vec![false]);
     }
 
     #[test]
     fn rejects_terrain_edges_and_existing_buildings() {
+        let mut app = test_app();
+        let world = app.world_mut();
         let mut terrain = Obstacle::new(8, 8);
         terrain.set_cell_blocked(1, 1);
         terrain.set_edge(3, 3, Side::Right);
-        let mut flow = FlowGrid { map: Map::new(&terrain), ..flow() };
-        let check = |flow: &FlowGrid, cell| valid_cells(flow, cell, UVec2::ONE, Vec2::splat(140.0), &[])[0];
-        assert!(!check(&flow, IVec2::ONE));
-        assert!(!check(&flow, IVec2::new(3, 3)));
-        let id = register_footprint(&mut flow, IVec2::new(4, 4), UVec2::splat(2)).unwrap();
-        assert!(!check(&flow, IVec2::new(4, 4)));
-        assert!(register_footprint(&mut flow, IVec2::new(4, 4), UVec2::ONE).is_err());
-        flow.map.remove_building(id).unwrap();
-        assert!(check(&flow, IVec2::new(4, 4)));
-        assert!(register_footprint(&mut flow, IVec2::new(7, 7), UVec2::splat(3)).is_err());
+        world.resource_mut::<FlowGrid>().map = Map::new(&terrain);
+        let check = |world: &mut World, cell| validate_footprint(world, cell, IVec2::ONE)[0];
+        assert!(!check(world, IVec2::ONE));
+        assert!(!check(world, IVec2::new(3, 3)));
+        let id = register_footprint(&mut world.resource_mut::<FlowGrid>(), IVec2::new(4, 4), UVec2::splat(2)).unwrap();
+        assert!(!check(world, IVec2::new(4, 4)));
+        assert!(register_footprint(&mut world.resource_mut::<FlowGrid>(), IVec2::new(4, 4), UVec2::ONE).is_err());
+        world.resource_mut::<FlowGrid>().map.remove_building(id).unwrap();
+        assert!(check(world, IVec2::new(4, 4)));
+        assert!(register_footprint(&mut world.resource_mut::<FlowGrid>(), IVec2::new(7, 7), UVec2::splat(2)).is_err());
     }
 }

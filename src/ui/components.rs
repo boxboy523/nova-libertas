@@ -129,3 +129,6 @@ pub struct MinimapMarker {
 
 #[derive(Component)]
 pub struct UnitSlot(pub usize);
+
+#[derive(Debug, Clone, Component)]
+pub struct BlockWorldInput;

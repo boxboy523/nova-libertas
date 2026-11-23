@@ -5,7 +5,7 @@ use crate::unit::component::Position;
 use serde::{Deserialize, Serialize};
 
 mod placement;
-pub use placement::{BeginBuildingPlacement, BuildingPlacementState};
+pub use placement::BeginBuildingPlacement;
 
 #[derive(Deserialize, Serialize, Debug, Clone, Copy)]
 pub struct BuildingStats {
@@ -35,12 +35,18 @@ pub struct BuildingPlugin;
 
 impl Plugin for BuildingPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BuildingPlacementState>()
-            .add_observer(placement::begin_placement)
+        app.add_observer(placement::begin_placement)
             .add_observer(placement::remove_building_obstacle)
             .add_systems(
                 Update,
-                (placement::update_placement, placement::update_building_transforms)
+                (
+                    placement::finish_placement,
+                    placement::update_placement,
+                    placement::cell_validate_system,
+                    placement::cell_system,
+                    placement::confirm_placement,
+                    placement::update_building_transforms,
+                )
                     .chain()
                     .in_set(BuildingPlacementSet)
                     .after(crate::input::mouse_input)

@@ -72,12 +72,9 @@ pub fn smooth_wall_passing_system(
                 }
                 CollisionResult::OutOfBounds => {
                     // 맵 경계 밖으로 나가지 않도록 위치 조정
-                    let clamped_x = col_pos
-                        .x
-                        .clamp(stats.size, spatial_grid.map_size.x - stats.size);
-                    let clamped_y = col_pos
-                        .y
-                        .clamp(stats.size, spatial_grid.map_size.y - stats.size);
+                    let world_size = spatial_grid.map_size.as_vec2() * spatial_grid.cell_size;
+                    let clamped_x = col_pos.x.clamp(stats.size, world_size.x - stats.size);
+                    let clamped_y = col_pos.y.clamp(stats.size, world_size.y - stats.size);
                     movement.dir_vec =
                         (Vec2::new(clamped_x, clamped_y) - **position).normalize_or_zero();
                 }

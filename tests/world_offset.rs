@@ -52,6 +52,7 @@ fn unit_model_offset_is_world_aligned_and_does_not_accumulate() {
         Transform::from_rotation(Quat::from_rotation_x(-0.7)),
     ))).id();
     let position = Vec2::new(20.0, 30.0);
+    let ground_y = world.resource::<TerrainHeightMap>().height_at(position);
     let offset = Vec3::new(3.0, 12.0, -5.0);
     let entities = [Vec3::ZERO, offset].map(|offset| {
         let entity = world.spawn((
@@ -70,7 +71,7 @@ fn unit_model_offset_is_world_aligned_and_does_not_accumulate() {
             let base = world.get::<Transform>(base_parent).unwrap();
             let shifted = world.get::<Transform>(shifted_parent).unwrap();
             assert_eq!(base.translation, shifted.translation);
-            assert_eq!(base.translation.y, 7.0);
+            assert_eq!(base.translation.y, ground_y);
 
             let base_local = world.get::<Transform>(base_child).unwrap().translation;
             let shifted_local = world.get::<Transform>(shifted_child).unwrap().translation;

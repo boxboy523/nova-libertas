@@ -7,7 +7,7 @@ use crate::input::UiInputCapture;
 use crate::map::GameMap;
 use crate::player::PlayerState;
 use crate::ui::UiEntityIndex;
-use crate::ui::components::{MinimapMarker, UiTween};
+use crate::ui::components::{BlockWorldInput, MinimapMarker, UiTween};
 use crate::ui::components::UiTweenState;
 use crate::ui::events::TweenFinishedEvent;
 use crate::{
@@ -97,9 +97,9 @@ pub fn selection_system(
     team_query: Query<&Team>,
     ui_input_capture: Res<UiInputCapture>,
     mut ui_state: ResMut<crate::ui::UiState>,
-    placement: Res<crate::building::BuildingPlacementState>,
+    block_world_input: Query<(), With<BlockWorldInput>>
 ) {
-    if placement.blocks_world_input() {
+    if !block_world_input.is_empty(){
         drag_selection.active = false;
         return;
     }
@@ -204,10 +204,10 @@ pub fn move_selected_units(
     state: Res<MouseState>,
     keys: Res<ButtonInput<KeyCode>>,
     query_select: Query<Entity, With<Selected>>,
-    placement: Res<crate::building::BuildingPlacementState>,
+    block_world_input: Query<(), With<BlockWorldInput>>,
     capture: Res<UiInputCapture>,
 ) {
-    if placement.blocks_world_input() || capture.pointer_over_ui || capture.right_captured {
+    if !block_world_input.is_empty() || capture.pointer_over_ui || capture.right_captured {
         return;
     }
     let auto_attack = keys.just_pressed(KeyCode::KeyA);
