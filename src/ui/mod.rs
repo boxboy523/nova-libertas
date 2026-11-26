@@ -5,7 +5,6 @@ use bevy_hui::HuiSystems;
 pub mod components;
 pub mod events;
 mod systems;
-mod util;
 
 #[derive(Resource, Default)]
 pub struct UiEntityIndex {

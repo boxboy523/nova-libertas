@@ -1,8 +1,7 @@
 use crate::{
     map::TerrainHeightMap,
     movement::component::UnitMovement,
-    unit::{component::{Dead, Position, UnitStats}, event::SpawnWallEvent, spatial_grid::SpatialGrid},
-    world3d::Billboard,
+    unit::{component::{Dead, Position, UnitStats}, spatial_grid::SpatialGrid},
 };
 use bevy::prelude::*;
 
@@ -22,25 +21,14 @@ pub fn update_spatial_grid_system(
     });
 }
 
-pub fn startup_spawn_wall(mut commands: Commands, spatial_grid: Res<SpatialGrid>) {
-    for x in 0..spatial_grid.width {
-        for y in 0..spatial_grid.height {
-            if spatial_grid.obstacle_cells[y * spatial_grid.width + x].is_none() {
-                let pos = spatial_grid.grid_to_world(Vec2::new(x as f32, y as f32));
-                commands.trigger(SpawnWallEvent { position: pos });
-            }
-        }
-    }
-}
-
 pub fn position_to_transform_system(
-    mut query: Query<(&Position, &UnitStats, Option<&Billboard>, &mut Transform)>,
+    mut query: Query<(&Position, &UnitStats, &mut Transform)>,
     height_map: Res<TerrainHeightMap>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
     let camera_up = camera.up().as_vec3();
     let horizontal_up = Vec3::new(camera_up.x, 0.0, camera_up.z);
-    for (position, stats, billboard, mut transform) in query.iter_mut() {
+    for (position, stats, mut transform) in query.iter_mut() {
         let height = height_map.height_at(**position);
         let ground_position = Vec3::new(position.x, height, position.y);
         transform.translation = ground_position - horizontal_up * stats.size;

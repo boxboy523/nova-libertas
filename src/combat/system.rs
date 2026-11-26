@@ -143,9 +143,9 @@ pub fn attack_system(
                             }
                         }
                     },
-                    AttackDelivery::Projectile { speed, t_type } => {
+                    AttackDelivery::Projectile { speed, id } => {
                         let anchor = opt_anchor.copied().unwrap_or_default();
-                        let Some(proj_visual) = visual.sprites.get(&t_type) else {
+                        let Some(proj_visual) = visual.sprites.get(&id) else {
                             warn!("Projectile sprite not found in catalog");
                             return;
                         };

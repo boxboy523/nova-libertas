@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_hui::HuiPlugin;
 use nova_libertas::{
     building::BuildingPlugin,
-    combat::CombatPlugin, constants::CELL_SIZE, debug::DebugPlugin, input::{InputPlugin, MouseState}, map::{GameMap, TerrainHeightMap}, movement::{MovementPlugin, flow_grid::FlowGrid}, player::PlayerPlugin, thing::ThingCatalog, ui::UIPlugin, unit::{UnitPlugin, spatial_grid::SpatialGrid}, visual::{SpritePlugin, team_color::TeamColorMaterial}, world3d::World3DPlugin
+    combat::CombatPlugin, constants::{ASSETS_PATH, CELL_SIZE}, debug::DebugPlugin, input::{InputPlugin, MouseState}, map::{GameMap, TerrainHeightMap}, movement::{MovementPlugin, flow_grid::FlowGrid}, player::PlayerPlugin, thing::ThingCatalog, ui::UIPlugin, unit::{UnitPlugin, spatial_grid::SpatialGrid}, visual::{SpritePlugin, team_color::TeamColorMaterial}, world3d::World3DPlugin
 };
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
     let height_map = TerrainHeightMap::from_game_map(&game_map);
     let flow_grid = FlowGrid::new(&game_map);
     let spatial_grid = SpatialGrid::new(&flow_grid);
-    let thing_catalog = ThingCatalog::new();
+    let thing_catalog = ThingCatalog::new(ASSETS_PATH).expect("Failed to load thing catalog");
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(HuiPlugin)

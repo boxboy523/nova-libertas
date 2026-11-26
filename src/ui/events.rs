@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_hui::prelude::UiId;
 
-use crate::{player::PlayerState, thing::ThingType, ui::{
+use crate::{player::PlayerState, thing::{ThingCatalog, ThingId}, ui::{
     BottomPanel, UiEntityIndex,
-    components::{HpBarRef, TweenBehavior, UiTween, UnitSlot}, util::unit_to_icon,
+    components::{HpBarRef, TweenBehavior, UiTween, UnitSlot},
 }, unit::component::{Selected, Team}};
 
 const BOTTOM_PANEL_Z_INDEX: i32 = 200;
@@ -29,6 +29,7 @@ pub fn add_uiid(
     query: Query<&UiId>,
     mut ui_index: ResMut<UiEntityIndex>,
     player_state: Res<PlayerState>,
+    thing_catalog: Res<ThingCatalog>,
     ui_state: Res<crate::ui::UiState>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
@@ -47,31 +48,40 @@ pub fn add_uiid(
         .and_then(|s| s.parse::<usize>().ok())
         .filter(|&n| (1..=9).contains(&n)) {
         let index = slot - 1;
-        if let Some(unit_type) = player_state.unit_loadout[index] {
-            let icon_handle = unit_to_icon(unit_type, &asset_server);
-            match icon_handle {
-                Ok(handle) => {
-                    let icon = commands.spawn((ImageNode::new(handle),Node {height: Val::Percent(75.0),aspect_ratio: Some(1.0),..Default::default()},Pickable::IGNORE,)).id();
+        if let Some(unit_id) = player_state.unit_loadout[index] {
+            commands.entity(trigger.entity).insert(UnitSlot(index)).observe(on_unit_slot_clicked);
+            if let Some(info) = thing_catalog.get_info(unit_id) {
+                if let Some(path) = &info.icon {
+                    let icon = commands.spawn((
+                        ImageNode::new(asset_server.load(path.clone())),
+                        Node { height: Val::Percent(75.0), aspect_ratio: Some(1.0), ..default() },
+                        Pickable::IGNORE,
+                    )).id();
                     commands.entity(trigger.entity).add_child(icon);
-                    commands.entity(trigger.entity).insert(UnitSlot(index)).observe(on_unit_slot_clicked);
                 }
-                Err(e) => {
-                    warn!("Failed to load icon for unit {:?}: {}", unit_type, e);
-                }
+            } else {
+                warn!("Unknown unit in loadout slot {slot}: {unit_id:?}");
             }
         }
     }
-    match ui_id.as_str() {
-        "build_supply" => {
-            commands.entity(trigger.entity).observe(
-                |mut click: On<Pointer<Click>>, mut commands: Commands| {
-                    if click.button == bevy::picking::pointer::PointerButton::Primary {
-                        click.propagate(false);
-                        commands.trigger(crate::building::BeginBuildingPlacement(ThingType::SupplyStorage));
-                    }
-                },
-            );
+    let name = ui_id.as_str();
+    if name.starts_with("building:") {
+        let building_id = ThingId::from_name(name);
+        if thing_catalog.get_info(building_id).and_then(|info| info.building_stats.as_ref()).is_none() {
+            warn!("Unknown or non-buildable thing for build button: {name}");
+            return;
         }
+        commands.entity(trigger.entity).observe(
+            move |mut click: On<Pointer<Click>>, mut commands: Commands| {
+                if click.button == bevy::picking::pointer::PointerButton::Primary {
+                    click.propagate(false);
+                    commands.trigger(crate::building::BeginBuildingPlacement(building_id));
+                }
+            },
+        );
+        return;
+    }
+    match name {
         "options_panel" => {
             commands.entity(trigger.entity).insert((
                 GlobalZIndex(300),
@@ -471,17 +481,17 @@ pub fn select_unit_slot(
     event: On<SelectUnitSlotEvent>,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
-    units: Query<(Entity, &ThingType, &Team)>,
+    units: Query<(Entity, &ThingId, &Team)>,
     player_state: Res<PlayerState>,
     mut ui_state: ResMut<crate::ui::UiState>,
 ) {
-    if let Some(&Some(unit_type)) = player_state.unit_loadout.get(event.index) {
+    if let Some(&Some(unit_id)) = player_state.unit_loadout.get(event.index) {
         ui_state.last_selected_slot = Some(event.index);
         selected_query.iter().for_each(|entity| {
             commands.entity(entity).remove::<Selected>();
         });
-        units.iter().for_each(|(entity, thing_type, team)| {
-            if *thing_type == unit_type && *team == Team::Player {
+        units.iter().for_each(|(entity, id, team)| {
+            if *id == unit_id && *team == Team::Player {
                 commands.entity(entity).insert(Selected);
             }
         });

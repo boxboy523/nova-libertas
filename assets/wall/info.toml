@@ -1,6 +1,0 @@
-t_type = "Wall"
-
-[sprite_info]
-scale = 0.15
-type = "simple"
-file = "brick_wall.jpg"

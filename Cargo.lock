@@ -3707,6 +3707,7 @@ dependencies = [
  "bevy_heightmap",
  "bevy_hui",
  "chunk-flow-field",
+ "const-fnv1a-hash",
  "dodgy_2d",
  "parry2d",
  "rayon",

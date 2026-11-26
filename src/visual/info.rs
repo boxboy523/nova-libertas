@@ -74,11 +74,16 @@ impl SpriteInfo {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SpriteInfoKind {
     Simple {
+        #[serde(default = "default_simple_sprite_file")]
         file: PathBuf, // 단순 이미지 파일 경로
     },
     AnimationSet {
         animations: HashMap<AnimationKind, AnimationClipInfo>, // 애니메이션 클립 정보
     },
+}
+
+fn default_simple_sprite_file() -> PathBuf {
+    PathBuf::from("sprite.png")
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
-use crate::{thing::ThingType, unit::component::Team, visual::{SpriteCatalog, UnitVisualKind, data::{AnimationKind, AnimationState}, team_color::TeamColorMaterial}};
+use crate::{thing::ThingId, unit::component::Team, visual::{SpriteCatalog, data::{AnimationKind, AnimationState}, team_color::TeamColorMaterial}};
 
 #[derive(Event)]
 pub struct ChangeVisualEvent {
     pub visual_entity: Entity,
     pub facing_oct: Option<u32>,
-    pub t_type: ThingType,
+    pub id: ThingId,
     pub team: Team,
     pub animation_kind: Option<AnimationKind>,
 }
@@ -37,10 +37,10 @@ pub fn change_visual_trigger(
         anim_state.kind
     };
 
-    let Some(anim_data) = catalog.get_data(event.t_type, animation_kind) else {
+    let Some(anim_data) = catalog.get_data(event.id, animation_kind) else {
         warn!(
             "Animation data for ThingType {:?} and AnimationKind {:?} not found in catalog",
-            event.t_type, animation_kind
+            event.id, animation_kind
         );
         return;
     };

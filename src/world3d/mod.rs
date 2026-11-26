@@ -129,6 +129,10 @@ pub fn create_atlas_quad(
     mesh
 }
 
+pub fn create_simple_quad(size: Vec2, sprite_offset: Vec2) -> Mesh {
+    create_atlas_quad(size, 1, 1, 0, 0, false, sprite_offset)
+}
+
 #[derive(Component)]
 pub struct RtsCamera {
     pub focus: Vec3,

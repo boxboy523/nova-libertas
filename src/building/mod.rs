@@ -45,7 +45,6 @@ impl Plugin for BuildingPlugin {
                     placement::cell_validate_system,
                     placement::cell_system,
                     placement::confirm_placement,
-                    placement::update_building_transforms,
                 )
                     .chain()
                     .in_set(BuildingPlacementSet)

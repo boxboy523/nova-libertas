@@ -1,4 +1,5 @@
-t_type = "AttackerGun"
+icon = "ui/icons/units/iconAttackerGun.png"
+
 [sprite_info]
 type = "animation_set"
 scale = 0.15

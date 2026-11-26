@@ -15,7 +15,7 @@ use crate::{
     input::MouseState,
     map::TerrainHeightMap,
     movement::event::MoveOrderEvent,
-    thing::ThingType,
+    thing::ThingId,
     ui::components::{DragSelection, HpBarFill, HpBarRef, HpBarRoot},
     unit::{component::{Position, Selected, Team}, spatial_grid::SpatialGrid},
     util::screen_to_ground,
@@ -225,12 +225,12 @@ pub fn move_selected_units(
 
 pub fn spawn_hp_bar(
     mut command: Commands,
-    units: Query<(Entity, &ThingType), Added<UnitHp>>,
+    units: Query<(Entity, &ThingId), Added<UnitHp>>,
     catalog: Res<SpriteCatalog>,
 ) {
-    units.iter().for_each(|(unit_entity, thing_type)| {
-        let Some(visual) = catalog.sprites.get(thing_type) else {
-            warn!("No visual found for thing type {:?}", thing_type);
+    units.iter().for_each(|(unit_entity, id)| {
+        let Some(visual) = catalog.sprites.get(id) else {
+            warn!("No visual found for thing type {:?}", id);
             return;
         };
 

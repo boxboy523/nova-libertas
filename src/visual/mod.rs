@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{thing::ThingType, unit::component::Team, visual::{data::{AnimationKind, AnimationSet, CurrentAnimation}, info::VisualAnchor, team_color::TeamColorMaterial}};
+use crate::{thing::ThingId, unit::component::Team, visual::{data::{AnimationKind, AnimationSet}, info::VisualAnchor, team_color::TeamColorMaterial}};
 use bevy::prelude::*;
 
 pub mod data;
@@ -63,13 +63,13 @@ pub enum UnitVisualKind {
 
 #[derive(Resource, Debug, Default)]
 pub struct SpriteCatalog {
-    pub sprites: HashMap<ThingType, UnitVisual>,
+    pub sprites: HashMap<ThingId, UnitVisual>,
 }
 
 impl SpriteCatalog {
-    pub fn get_material(&self, t_type: ThingType, team: Team, kind: AnimationKind) -> Option<Handle<TeamColorMaterial>> {
+    pub fn get_material(&self, id: ThingId, team: Team, kind: AnimationKind) -> Option<Handle<TeamColorMaterial>> {
         self.sprites
-            .get(&t_type)
+            .get(&id)
             .and_then(|visual| match &visual.kind {
                 UnitVisualKind::AnimationSet(animation_set) => animation_set.animations.get(&kind),
                 _ => None,
@@ -77,9 +77,9 @@ impl SpriteCatalog {
             .and_then(|team_materials| team_materials.get(&team).cloned())
     }
 
-    pub fn get_data(&self, t_type: ThingType, kind: AnimationKind) -> Option<&data::AnimationData> {
+    pub fn get_data(&self, id: ThingId , kind: AnimationKind) -> Option<&data::AnimationData> {
         self.sprites
-            .get(&t_type)
+            .get(&id)
             .and_then(|visual| match &visual.kind {
                 UnitVisualKind::AnimationSet(animation_set) => animation_set.animations.get(&kind),
                 _ => None,

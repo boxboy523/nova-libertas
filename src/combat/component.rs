@@ -1,4 +1,4 @@
-use crate::{thing::ThingType, unit::component::Team};
+use crate::{thing::ThingId, unit::component::Team};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +15,7 @@ pub struct UnitBattleStats {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AttackDelivery {
     Instant,
-    Projectile { speed: f32, t_type: ThingType },
+    Projectile { speed: f32, id: ThingId },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

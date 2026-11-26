@@ -12,7 +12,6 @@ pub struct UnitPlugin;
 impl Plugin for UnitPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(event::spawn_units_trigger)
-            .add_observer(event::spawn_wall_trigger)
             .add_systems(
                 FixedUpdate,
                 (

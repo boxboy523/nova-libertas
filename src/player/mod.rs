@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::thing::ThingType;
+use crate::thing::ThingId;
 
 #[derive(Resource, Debug, Default)]
 pub struct Resources {
@@ -11,15 +11,15 @@ pub struct Resources {
 
 #[derive(Resource, Debug, Default)]
 pub struct PlayerState {
-    pub unit_loadout: [Option<ThingType>; 9],
+    pub unit_loadout: [Option<ThingId>; 9],
     pub resources: Resources,
 }
 
 pub fn player_state_init(mut state: ResMut<PlayerState>) {
     // Initialize the player's unit loadout with default values
     state.unit_loadout = [
-        Some(ThingType::AttackerGun),
-        Some(ThingType::AttackerCannon),
+        Some(ThingId::from_name("unit:attackerGun")),
+        Some(ThingId::from_name("unit:attackerCannon")),
         None,
         None,
         None,

@@ -9,7 +9,7 @@ use crate::{
     input::UiInputCapture,
     map::TerrainHeightMap,
     movement::flow_grid::FlowGrid,
-    thing::{ThingCatalog, ThingType},
+    thing::{ThingCatalog, ThingId},
     ui::components::BlockWorldInput,
     unit::{component::{Position, Team}, spatial_grid::SpatialGrid},
     util::{circle_rect_overlap, footprint_center, screen_to_world, snapped_origin},
@@ -19,7 +19,7 @@ use crate::{
 
 #[derive(Debug, Clone, Component)]
 pub(super) struct PlacementSession {
-    thing_type: ThingType,
+    thing_type: ThingId,
     size: UVec2,
     ready: bool,
 }
@@ -44,7 +44,7 @@ pub(super) struct CellOverlay {
 pub(super) struct IsPlacementSession;
 
 #[derive(Event)]
-pub struct BeginBuildingPlacement(pub ThingType);
+pub struct BeginBuildingPlacement(pub ThingId);
 
 pub(super) fn begin_placement(
     event: On<BeginBuildingPlacement>,
@@ -82,7 +82,7 @@ pub(super) fn begin_placement(
     let Some(visual) = sprites.sprites.get(&event.0) else {
         return;
     };
-    let (mesh, source_material) = visual.get_mesh_mat(None, Some(Team::Player));
+    let (_, source_material) = visual.get_mesh_mat(None, Some(Team::Player));
     let Some(source) = team_materials.get(&source_material) else {
         return;
     };
@@ -95,16 +95,26 @@ pub(super) fn begin_placement(
         ..default()
     });
     // spawn building ghost ui
-    commands.spawn((
-        Mesh3d(mesh),
+    let ghost = spawn_billboard(&mut commands, visual, session, Some(Team::Player));
+    commands.entity(ghost)
+        .remove::<MeshMaterial3d<TeamColorMaterial>>()
+        .insert((
         MeshMaterial3d(ghost_material.clone()),
-        Transform::from_translation(visual.model_offset),
-        Pickable::IGNORE,
         Visibility::Inherited,
+        Pickable::IGNORE,
         NotShadowCaster,
         Ghost,
-        ChildOf(session),
     ));
+    // commands.spawn((
+    //     Mesh3d(mesh),
+
+    //     Transform::from_translation(visual.model_offset),
+    //     Pickable::IGNORE,
+    //     Visibility::Inherited,
+    //     NotShadowCaster,
+    //     Ghost,
+    //     ChildOf(session),
+    // ));
     let green = materials.add(cell_material(Color::srgba(0.1, 1.0, 0.2, 0.4)));
     let red = materials.add(cell_material(Color::srgba(1.0, 0.1, 0.1, 0.4)));
     let cell_transform = Transform::from_translation(Vec3::new(
@@ -293,7 +303,7 @@ pub(super) fn update_placement(
     commands.entity(entity).insert(Visibility::Visible);
     let origin = snapped_origin(Vec2::new(hit.x, hit.z), session.size, flow.cell_size);
     let center = footprint_center(origin, session.size, flow.cell_size);
-    transform.translation = Vec3::new(center.x, hit.y, center.y);
+    transform.translation = Vec3::new(center.x, heights.height_at(center), center.y);
     container.grid_pos = origin;
 }
 
@@ -348,19 +358,19 @@ pub(super) fn confirm_placement(
     commands.entity(root).despawn_children().remove::<PlacementSession>();
 }
 
-pub(super) fn update_building_transforms(
-    mut buildings: Query<(&Position, &ThingType, &mut Transform), (With<Building>, Without<Camera3d>)>,
-    camera: Single<&Transform, With<Camera3d>>,
-    heights: Res<TerrainHeightMap>,
-    sprites: Res<SpriteCatalog>,
-) {
-    for (position, thing_type, mut transform) in &mut buildings {
-        if let Some(visual) = sprites.sprites.get(thing_type) {
-            transform.translation = Vec3::new(position.x, heights.height_at(position.0), position.y)
-                + camera.up().as_vec3() * (visual.size.y * 0.5);
-        }
-    }
-}
+// pub(super) fn update_building_transforms(
+//     mut buildings: Query<(&Position, &ThingType, &mut Transform), (With<Building>, Without<Camera3d>)>,
+//     camera: Single<&Transform, With<Camera3d>>,
+//     heights: Res<TerrainHeightMap>,
+//     sprites: Res<SpriteCatalog>,
+// ) {
+//     for (position, thing_type, mut transform) in &mut buildings {
+//         if let Some(visual) = sprites.sprites.get(thing_type) {
+//             transform.translation = Vec3::new(position.x, heights.height_at(position.0), position.y)
+//                 + camera.up().as_vec3() * (visual.size.y * 0.5);
+//         }
+//     }
+// }
 
 pub(super) fn sync_spatial_obstacles(flow: Res<FlowGrid>, mut spatial: ResMut<SpatialGrid>) {
     spatial.update(&flow);

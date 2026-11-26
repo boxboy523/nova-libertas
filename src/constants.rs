@@ -16,3 +16,4 @@ pub const TERRAIN_HEIGHT_STEP: f32 = 20.0; // 지형 높이 차이 단계
 pub const CAMERA_PITCH: f32 = 51.26_f32.to_radians(); // 카메라 피치 각도
 pub const CAMERA_YAW: f32 = 0.0;
 pub const CAMERA_MOUSE_DEADZONE: f32 = 10.0; // 마우스 이동 감지 데드존
+pub const ASSETS_PATH: &str = "assets"; // 에셋 디렉토리 경로

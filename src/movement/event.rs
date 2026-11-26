@@ -1,6 +1,5 @@
 use crate::{combat::component::{Attack, AutoAttack}, movement::{component::{FlowFieldEntity, Moving}, flow_grid::FlowGrid, set_moving}};
 use bevy::prelude::*;
-use chunk_flow_field::types::FlowField;
 use std::collections::HashSet;
 
 #[derive(Event)]

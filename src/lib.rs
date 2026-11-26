@@ -28,17 +28,17 @@ pub fn load_map_from_csv(path: &str) -> (usize, usize, Vec<bool>) {
 }
 
 use bevy::prelude::*;
-use crate::{thing::ThingType, unit::{component::Team, event::SpawnUnitEvent}};
+use crate::{thing::ThingId, unit::{component::Team, event::SpawnUnitEvent}};
 
 pub fn setup(mut commands: Commands) {
     for i in 1..7 {
         for j in 1..7 {
             commands.trigger(SpawnUnitEvent {
                 position: Vec2::new(i as f32 * 40.0 + 200.0, j as f32 * 40.0 + 200.0),
-                t_type: if i % 2 == 0 {
-                    ThingType::AttackerGun
+                id: if i % 2 == 0 {
+                    ThingId::from_name("unit:attackerGun")
                 } else {
-                    ThingType::AttackerCannon
+                    ThingId::from_name("unit:attackerCannon")
                 },
                 team: if (i + j) % 2 == 0 {
                     Team::Player

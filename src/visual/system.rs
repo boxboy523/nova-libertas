@@ -2,37 +2,23 @@ use crate::{
     combat::component::Attack,
     constants::SWITCH_FACE_ANGLE,
     movement::component::{Moving, Stopped, UnitMovement},
-    thing::ThingType,
+    thing::{ThingCatalog, ThingId},
     unit::component::Team,
     visual::{SpriteCatalog, UnitVisual, UnitVisualKind, data::{AnimationData, AnimationFrameMesh, AnimationKind, AnimationSet, AnimationState, CurrentAnimation}, event::ChangeVisualEvent, info::{SpriteConfig, SpriteInfoKind}, team_color::TeamColorMaterial},
-    world3d::{Billboard, create_atlas_quad},
+    world3d::{Billboard, create_atlas_quad, create_simple_quad},
 };
-use bevy::{mesh::VertexAttributeValues, prelude::*};
-use strum::IntoEnumIterator;
-
-/// Simple sprites remain center-aligned; sprite_offset only translates their geometry.
-fn create_simple_quad(size: Vec2, sprite_offset: Vec2) -> Mesh {
-    let mut mesh = Mesh::from(Rectangle::from_size(size));
-    if let Some(VertexAttributeValues::Float32x3(positions)) =
-        mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
-    {
-        for position in positions {
-            position[0] += sprite_offset.x;
-            position[1] += sprite_offset.y;
-        }
-    }
-    mesh
-}
+use bevy::prelude::*;
 
 pub fn sprite_catalog_startup_system(
+    thing_catalog: Res<ThingCatalog>,
     mut catalog: ResMut<SpriteCatalog>,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<TeamColorMaterial>>,
 ) {
-    ThingType::iter().for_each(|t_type| {
-        let info_path = t_type.get_path();
-        let info_asset_path = t_type.get_assets_path();
+    thing_catalog.iter().for_each(|(id, entry)| {
+        let info_path = thing_catalog.asset_root.join(&entry.asset_dir);
+        let info_asset_path = entry.asset_dir.clone();
         let text = std::fs::read_to_string(info_path.join("info.toml"))
             .expect("Failed to read thing info file");
 
@@ -40,7 +26,7 @@ pub fn sprite_catalog_startup_system(
             toml::from_str(&text).expect("UnitSprite: Failed to parse thing info file");
 
         let world_size = sprite_conf.sprite_info.world_size(&info_path)
-            .unwrap_or_else(|error| panic!("Invalid sprite configuration for {t_type:?}: {error:#}"));
+            .unwrap_or_else(|error| panic!("Invalid sprite configuration for {id:?}: {error:#}"));
         let visual_kind = match &sprite_conf.sprite_info.kind {
             SpriteInfoKind::Simple { file } => {
                 let image = asset_server.load(info_asset_path.join(file));
@@ -54,11 +40,11 @@ pub fn sprite_catalog_startup_system(
 
             SpriteInfoKind::AnimationSet { animations } => {
                 if !animations.contains_key(&AnimationKind::Stand) {
-                    panic!("AnimationSet must contain a 'stand' animation for {:?}", t_type);
+                    panic!("AnimationSet must contain a 'stand' animation for {:?}", id);
                 }
                 UnitVisualKind::AnimationSet(AnimationSet{ animations: animations.iter().map(|(kind, anim_info)| {
                     let frame_size = sprite_conf.sprite_info.scaled_size(anim_info.cell_size)
-                        .unwrap_or_else(|error| panic!("Invalid {kind:?} sprite size for {t_type:?}: {error}"));
+                        .unwrap_or_else(|error| panic!("Invalid {kind:?} sprite size for {id:?}: {error}"));
                     if anim_info.frame_count > anim_info.columns {
                         panic!(
                             "Animation frame count exceeds the number of cells in the sprite sheet for {:?}",
@@ -110,7 +96,7 @@ pub fn sprite_catalog_startup_system(
         };
 
         catalog.sprites.insert(
-            t_type,
+            *id,
             UnitVisual {
                 kind: visual_kind,
                 size: world_size,
@@ -124,13 +110,13 @@ pub fn sprite_catalog_startup_system(
 
 pub fn look_dir_system(
     mut commands: Commands,
-    parent_query: Query<(&UnitMovement, &ThingType, Option<&Team>), Changed<UnitMovement>>,
+    parent_query: Query<(&UnitMovement, &ThingId, Option<&Team>), Changed<UnitMovement>>,
     query: Query<(&ChildOf, &AnimationState, Entity)>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
 ) {
     query.iter().for_each(
         |(parent, anim_state, entity)| {
-            let Ok((movement, t_type, opt_team)) = parent_query.get(parent.0) else {
+            let Ok((movement, id, opt_team)) = parent_query.get(parent.0) else {
                 return;
             };
             if movement.preferred_dir.length_squared() < f32::EPSILON {
@@ -156,7 +142,7 @@ pub fn look_dir_system(
             commands.trigger(ChangeVisualEvent {
                 visual_entity: entity,
                 facing_oct: Some(facing_oct),
-                t_type: *t_type,
+                id: *id,
                 team: opt_team.copied().unwrap_or(Team::Neutral),
                 animation_kind: None,
             });
@@ -166,7 +152,7 @@ pub fn look_dir_system(
 
 pub fn animation_system(
     time: Res<Time>,
-    query_parent: Query<&ThingType>,
+    query_parent: Query<&ThingId>,
     mut query: Query<(&ChildOf, &mut AnimationState, &mut Mesh3d)>,
     catalog: Res<SpriteCatalog>,
 ) {
@@ -197,16 +183,16 @@ pub fn animation_system(
 
 pub fn change_animation_system(
     mut commands: Commands,
-    query_parent: Query<(&CurrentAnimation, &ThingType, Option<&Team>), Changed<CurrentAnimation>>,
+    query_parent: Query<(&CurrentAnimation, &ThingId, Option<&Team>), Changed<CurrentAnimation>>,
     query: Query<(&ChildOf, Entity), With<Billboard>>,
 ) {
     query.iter().for_each(
         |(parent, entity)| {
-            if let Ok((cur_anim, t_type, opt_team)) = query_parent.get(parent.0) {
+            if let Ok((cur_anim, id, opt_team)) = query_parent.get(parent.0) {
                 commands.trigger(ChangeVisualEvent {
                     visual_entity: entity,
                     facing_oct: None,
-                    t_type: *t_type,
+                    id: *id,
                     team: opt_team.copied().unwrap_or(Team::Neutral),
                     animation_kind: Some(cur_anim.0),
                 });
