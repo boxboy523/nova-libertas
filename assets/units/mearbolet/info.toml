@@ -1,35 +1,9 @@
 icon = "ui/icons/units/iconMearbolet.png"
 
 [sprite_info]
-type = "animation_set"
+type = "simple"
+file = "sprite.png"
 scale = 0.15
-
-[sprite_info.animations.stand]
-file = "stand.png"
-cell_size = [488, 488]
-columns = 1
-rows = 5
-frame_count = 1
-fps = 1.0
-looping = true
-
-[sprite_info.animations.move]
-file = "stand.png"
-cell_size = [488, 488]
-columns = 1
-rows = 5
-frame_count = 1
-fps = 1.0
-looping = true
-
-[sprite_info.animations.attack]
-file = "stand.png"
-cell_size = [488, 488]
-columns = 1
-rows = 5
-frame_count = 1
-fps = 1.0
-looping = true
 
 [unit_stats]
 size = 22.0
