@@ -1,0 +1,23 @@
+icon = "ui/icons/units/iconMearbolet.png"
+
+[sprite_info]
+type = "simple"
+file = "sprite.png"
+scale = 0.15
+
+[unit_stats]
+size = 22.0
+max_speed = 80.0
+acceleration = 160.0
+
+[battle_stats]
+range = 120.0
+damage = 60.0
+cooldown = 1.20
+
+[battle_stats.delivery]
+kind = "instant"
+
+[battle_stats.impact]
+kind = "area"
+radius = 20.0

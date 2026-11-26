@@ -1,0 +1,51 @@
+icon = "ui/icons/units/iconAlbatross.png"
+
+[sprite_info]
+type = "animation_set"
+scale = 0.15
+
+[sprite_info.animations.stand]
+file = "stand.png"
+cell_size = [432, 432]
+columns = 1
+rows = 5
+frame_count = 1
+fps = 1.0
+looping = true
+
+[sprite_info.animations.move]
+file = "stand.png"
+cell_size = [432, 432]
+columns = 1
+rows = 5
+frame_count = 1
+fps = 1.0
+looping = true
+
+[sprite_info.animations.attack]
+file = "stand.png"
+cell_size = [432, 432]
+columns = 1
+rows = 5
+frame_count = 1
+fps = 1.0
+looping = true
+
+[unit_stats]
+size = 19.4
+max_speed = 100.0
+acceleration = 200.0
+
+[battle_stats]
+range = 80.0
+damage = 120.0
+cooldown = 1.30
+
+[battle_stats.delivery]
+kind = "projectile"
+speed = 100.0
+id = "projectile:winged"
+
+[battle_stats.impact]
+kind = "area"
+radius = 10.0

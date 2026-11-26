@@ -1,0 +1,20 @@
+[sprite_info]
+type = "simple"
+file = "sprite.png"
+scale = 0.15
+
+[unit_stats]
+size = 13.7
+max_speed = 80.0
+acceleration = 160.0
+
+[battle_stats]
+range = 20.0
+damage = 70.0
+cooldown = 0.90
+
+[battle_stats.delivery]
+kind = "instant"
+
+[battle_stats.impact]
+kind = "single"
