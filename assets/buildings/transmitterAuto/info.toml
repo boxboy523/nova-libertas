@@ -1,0 +1,11 @@
+icon = "ui/icons/buildings/icon0Trans.png"
+
+[building_stats]
+size = [2, 2]
+
+[sprite_info]
+type = "simple"
+scale = 0.15
+file = "sprite.png"
+sprite_offset = [0.0, -15.0]
+model_offset = [0.0, 0.0, 15.0]
