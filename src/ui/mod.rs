@@ -4,7 +4,7 @@ use bevy_hui::HuiSystems;
 
 pub mod components;
 pub mod events;
-mod systems;
+mod system;
 
 #[derive(Resource, Default)]
 pub struct UiEntityIndex {
@@ -75,21 +75,21 @@ impl Plugin for UIPlugin {
             .add_systems(
             Startup,
                 (
-                    systems::spawn_selection_box,
-                    systems::register_ui_components,
-                    systems::spawn_main_ui,
+                    system::spawn_selection_box,
+                    system::register_ui_components,
+                    system::spawn_main_ui,
                 )
                     .chain(),
             )
         .add_systems(
             Update,
             (
-                systems::selection_system,
-                systems::update_selection_box,
-                systems::move_selected_units,
-                systems::spawn_hp_bar,
-                systems::update_hp_bar_position_system,
-                systems::update_hp_bar_fill_system,
+                system::selection_system,
+                system::update_selection_box,
+                system::move_selected_units,
+                system::spawn_hp_bar,
+                system::update_hp_bar_position_system,
+                system::update_hp_bar_fill_system,
             )
                 .chain()
                 .after(mouse_input)
@@ -97,13 +97,13 @@ impl Plugin for UIPlugin {
         )
             .add_systems(
                 Update,
-                    systems::animate_ui_tween,
+                    system::animate_ui_tween,
             )
             .add_systems(Update,
-                systems::minimap_system.after(HuiSystems::Build))
+                system::minimap_system.after(HuiSystems::Build))
             .add_systems(
                 Update,
-                systems::update_resource_text.after(HuiSystems::Build),
+                system::update_resource_text.after(HuiSystems::Build),
 )
             .add_observer(events::remove_hp_bar)
             .add_observer(events::add_uiid)

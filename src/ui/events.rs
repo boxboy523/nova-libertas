@@ -176,10 +176,126 @@ pub fn add_uiid(
                 .entity(trigger.entity)
                 .insert(ScrollPosition(Vec2::ZERO));
         }
+        "unit_icon_grid" => {
+            spawn_unit_grid(&mut commands, trigger.entity, &player_state, &thing_catalog, &asset_server);
+        }
+        "build_icon_grid" => {
+            spawn_building_grid(&mut commands, trigger.entity, &player_state, &thing_catalog, &asset_server);
+        }
         _ => {}
     }
 }
 
+fn spawn_unit_grid(
+    commands: &mut Commands,
+    parent: Entity,
+    player_state: &PlayerState,
+    thing_catalog: &ThingCatalog,
+    asset_server: &AssetServer,
+) {
+    let mut tier_info = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+    player_state.unit_loadout.iter().for_each(|&unit_id| {
+        let Some(unit_id) = unit_id else {
+            return;
+        };
+        let Some(info) = thing_catalog.get_info(unit_id) else {
+            warn!("Unknown unit in loadout: {unit_id:?}");
+            return;
+        };
+        let Some(prod) = info.unit_production.as_ref() else {
+            warn!("ThingType {:?} does not have unit_production", unit_id);
+            return;
+        };
+        tier_info[(prod.tier - 1) as usize].push(info.clone());
+    });
+    let max_length = tier_info.iter().map(|v| v.len()).max().unwrap_or(0);
+    tier_info.iter().for_each(|infos| {
+        infos.iter().for_each(|info| {
+            let Some(path) = &info.icon else {
+                warn!("ThingType {:?} does not have an icon", info);
+                return;
+            };
+            let slot = commands.spawn((
+                Node {
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ChildOf(parent),
+            )).observe(move |mut click: On<Pointer<Click>>, mut commands: Commands| {
+                if click.button == bevy::picking::pointer::PointerButton::Primary {
+                    click.propagate(false);
+                    //TODO: Trigge spawn unit event for this unit type
+                }
+            }).id();
+            commands.spawn((
+                ImageNode::new(asset_server.load(path.clone())),
+                Node { height: Val::Percent(90.0), aspect_ratio: Some(1.0), ..default() },
+                ChildOf(slot),
+                Pickable::IGNORE,
+            ));
+        });
+        (infos.len()..max_length).for_each(|_| {
+            commands.spawn((
+                Node {
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ChildOf(parent),
+            ));
+        });
+    });
+}
+
+fn spawn_building_grid(
+    commands: &mut Commands,
+    parent: Entity,
+    player_state: &PlayerState,
+    thing_catalog: &ThingCatalog,
+    asset_server: &AssetServer,
+) {
+    let mut spawn_slot = |&building_id| {
+        let mut slot = commands.spawn((
+            Node {
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ChildOf(parent),
+        ));
+        let Some(id) = building_id else {
+            return;
+        };
+        let Some(info) = thing_catalog.get_info(id) else {
+            warn!("Unknown building in loadout: {building_id:?}");
+            return;
+        };
+        let Some(path) = &info.icon else {
+            warn!("ThingType {:?} does not have an icon", info);
+            return;
+        };
+        let slot = slot.observe(move |mut click: On<Pointer<Click>>, mut commands: Commands| {
+            if click.button == bevy::picking::pointer::PointerButton::Primary {
+                click.propagate(false);
+                commands.trigger(crate::building::BeginBuildingPlacement(id));
+            }
+        }).id();
+        commands.spawn((
+            ImageNode::new(asset_server.load(path.clone())),
+            Node { height: Val::Percent(90.0), aspect_ratio: Some(1.0), ..default() },
+            ChildOf(slot),
+            Pickable::IGNORE,
+        ));
+    };
+
+    (0..3).for_each(|i| {
+        spawn_slot(&player_state.building_loadout.core[i]);
+        spawn_slot(&player_state.building_loadout.production[i]);
+        spawn_slot(&player_state.building_loadout.research[i]);
+        spawn_slot(&player_state.building_loadout.defense[i]);
+    });
+}
 pub fn remove_uiid(
     trigger: On<Remove, UiId>,
     query: Query<&UiId>,
