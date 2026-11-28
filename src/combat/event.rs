@@ -1,5 +1,5 @@
 use crate::{
-    combat::component::{Attack, AutoAttack, UnitHp},
+    combat::component::{Attack, AutoAttack, Durability},
     movement::{component::{DelayedStopTrigger, FieldFollowTarget, FlowFieldEntity, Moving, Stopped}, flow_grid::FlowGrid},
     unit::{component::{Dead, Position, Team}, spatial_grid::SpatialGrid},
 };
@@ -62,11 +62,11 @@ pub struct DamageEvent {
 pub fn damage_trigger(
     event: On<DamageEvent>,
     mut commands: Commands,
-    mut query: Query<(Entity, &mut UnitHp)>,
+    mut query: Query<(Entity, &mut Durability)>,
 ) {
-    if let Ok((_, mut hp)) = query.get_mut(event.receiver) {
-        hp.current -= event.damage;
-        if hp.current <= 0.0 {
+    if let Ok((_, mut dur)) = query.get_mut(event.receiver) {
+        dur.current_hp -= event.damage;
+        if dur.current_hp <= 0.0 {
             commands.entity(event.receiver).insert(Dead);
             commands.entity(event.receiver).remove::<Moving>();
             commands.entity(event.receiver).remove::<Attack>();
@@ -87,7 +87,7 @@ pub struct ImpactEvent {
 pub fn impact_trigger(
     event: On<ImpactEvent>,
     mut commands: Commands,
-    query: Query<(Entity, &Team), With<UnitHp>>,
+    query: Query<(Entity, &Team), With<Durability>>,
     spatial_grid: Res<SpatialGrid>,
 ) {
     spatial_grid

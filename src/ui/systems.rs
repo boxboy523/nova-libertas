@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use bevy::prelude::*;
 use bevy_hui::prelude::{HtmlComponents, HtmlNode};
 
+use crate::combat::component::Durability;
 use crate::input::UiInputCapture;
 use crate::map::GameMap;
 use crate::player::PlayerState;
@@ -11,7 +12,7 @@ use crate::ui::components::{BlockWorldInput, MinimapMarker, UiTween};
 use crate::ui::components::UiTweenState;
 use crate::ui::events::TweenFinishedEvent;
 use crate::{
-    combat::{component::UnitHp, event::AttackOrderEvent},
+    combat::event::AttackOrderEvent,
     input::MouseState,
     map::TerrainHeightMap,
     movement::event::MoveOrderEvent,
@@ -225,7 +226,7 @@ pub fn move_selected_units(
 
 pub fn spawn_hp_bar(
     mut command: Commands,
-    units: Query<(Entity, &ThingId), Added<UnitHp>>,
+    units: Query<(Entity, &ThingId), Added<Durability>>,
     catalog: Res<SpriteCatalog>,
 ) {
     units.iter().for_each(|(unit_entity, id)| {
@@ -317,10 +318,10 @@ pub fn update_hp_bar_position_system(
 }
 
 pub fn update_hp_bar_fill_system(
-    units: Query<(&UnitHp, &HpBarRef), Changed<UnitHp>>,
+    units: Query<(&Durability, &HpBarRef), Changed<Durability>>,
     mut fills: Query<&mut Node, With<HpBarFill>>,
 ) {
-    units.iter().for_each(|(unit_hp, hp_bar)| {
+    units.iter().for_each(|(dur, hp_bar)| {
         let Ok(mut fill_node) = fills.get_mut(hp_bar.fill) else {
             warn!(
                 "Failed to get fill node for hp bar of entity {:?}",
@@ -328,7 +329,7 @@ pub fn update_hp_bar_fill_system(
             );
             return;
         };
-        let ratio = (unit_hp.current / unit_hp.max).clamp(0.0, 1.0);
+        let ratio = (dur.current_hp / dur.max_hp).clamp(0.0, 1.0);
 
         fill_node.width = percent(ratio * 100.0);
     });

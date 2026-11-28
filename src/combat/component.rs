@@ -26,9 +26,26 @@ pub enum AttackImpact {
 }
 
 #[derive(Component, Debug, Clone, Copy)]
-pub struct UnitHp {
-    pub current: f32,
-    pub max: f32,
+pub struct Durability {
+    pub current_hp: f32,
+    pub max_hp: f32,
+    pub armor: f32,
+}
+
+impl Durability {
+    pub fn new(stats: &DurabilityStats, hp: Option<f32>) -> Self {
+        Self {
+            current_hp: hp.unwrap_or(stats.max_hp),
+            max_hp: stats.max_hp,
+            armor: stats.armor,
+        }
+    }
+}
+
+#[derive(Component, Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct DurabilityStats {
+    pub max_hp: f32,
+    pub armor: f32,
 }
 
 #[derive(Component, Debug, Clone, Copy)]

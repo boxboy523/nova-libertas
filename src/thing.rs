@@ -1,6 +1,6 @@
 use std::{fs, path::{Path, PathBuf}};
 
-use crate::{building::BuildingStats, combat::component::UnitBattleStats, unit::component::UnitStats};
+use crate::{building::BuildingStats, combat::component::{DurabilityStats, UnitBattleStats}, unit::component::UnitStats};
 use bevy::{platform::collections::HashMap, prelude::*};
 use serde::{Deserialize, Serialize};
 
@@ -109,11 +109,38 @@ impl ThingCatalog {
     }
 }
 
+#[derive(Component, Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct UnitProductionInfo {
+    pub tier: u8,
+    pub ore_cost: u32,
+    pub oil_cost: u32,
+    pub population: u32,
+    pub production_time: f32,
+}
+
+#[derive(Component, Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ProductionCapability {
+    pub tier: u8,
+    pub queue_capacity: usize,
+    pub parallel_capacity: usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+pub struct ConstructionInfo {
+    pub ore_cost: u32,
+    pub oil_cost: u32,
+    pub construction_time: f32,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ThingInfo {
     pub unit_stats: Option<UnitStats>,
     pub battle_stats: Option<UnitBattleStats>,
     pub building_stats: Option<BuildingStats>,
+    pub durability: Option<DurabilityStats>,
+    pub unit_production: Option<UnitProductionInfo>,
+    pub construction: Option<ConstructionInfo>,
+    pub production_capability: Option<ProductionCapability>,
     pub icon: Option<PathBuf>,
 }
 

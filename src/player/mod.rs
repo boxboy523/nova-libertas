@@ -15,6 +15,13 @@ pub struct PlayerState {
     pub resources: Resources,
 }
 
+pub struct BuildingLoadout {
+    pub core: [Option<ThingId>; 4],
+    pub production: [Option<ThingId>; 4],
+    pub research: [Option<ThingId>; 4],
+    pub defense: [Option<ThingId>; 4],
+}
+
 pub fn player_state_init(mut state: ResMut<PlayerState>) {
     // Initialize the player's unit loadout with default values
     state.unit_loadout = [

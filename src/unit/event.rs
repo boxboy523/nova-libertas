@@ -1,5 +1,5 @@
 use crate::{
-    combat::component::UnitHp,
+    combat::component::Durability,
     movement::component::{Stopped, UnitMovement},
     thing::{ThingCatalog, ThingId},
     unit::component::{Position, Team},
@@ -13,7 +13,7 @@ pub struct SpawnUnitEvent {
     pub position: Vec2,
     pub id: ThingId,
     pub team: Team,
-    pub hp: f32, // 유닛의 초기 체력
+    pub hp: Option<f32>, // 유닛의 초기 체력, 없으면 최대 체력으로 설정
 }
 
 pub fn spawn_units_trigger(
@@ -26,7 +26,7 @@ pub fn spawn_units_trigger(
         warn!("ThingType {:?} not found in catalog", event.id);
         return;
     };
-    if info.unit_stats.is_none() || info.battle_stats.is_none() {
+    if info.unit_stats.is_none() || info.battle_stats.is_none() || info.durability.is_none() {
         warn!(
             "ThingType {:?} does not have unit_stats or battle_stats",
             event.id
@@ -46,10 +46,7 @@ pub fn spawn_units_trigger(
                 ..Default::default()
             },
             UnitMovement::default(),
-            UnitHp {
-                current: event.hp,
-                max: event.hp,
-            },
+            Durability::new(&info.durability.unwrap(), event.hp),
             event.id,
             CurrentAnimation(AnimationKind::Stand)
         ))

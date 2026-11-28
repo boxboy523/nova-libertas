@@ -45,7 +45,7 @@ pub fn setup(mut commands: Commands) {
                 } else {
                     Team::Enemy
                 },
-                hp: 100.0,
+                hp: None,
             });
         }
     }
