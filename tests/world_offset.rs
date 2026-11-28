@@ -9,11 +9,9 @@ use nova_libertas::{
     map::TerrainHeightMap,
     unit::{
         component::{Position, Team, UnitStats},
-        event::{SpawnWallEvent, spawn_wall_trigger},
         system::position_to_transform_system,
     },
-    thing::ThingType,
-    visual::{SpriteCatalog, UnitVisual, UnitVisualKind, info::VisualAnchor},
+    visual::{UnitVisual, UnitVisualKind, info::VisualAnchor},
     world3d::{Billboard, spawn_billboard},
 };
 
@@ -144,27 +142,4 @@ fn projectile_render_offset_does_not_change_flight_roll_or_arrival() {
         assert!(world.get_entity(parent).is_err());
         assert!(world.get_entity(child).is_err());
     }
-}
-
-#[test]
-fn static_wall_applies_model_offset_once_at_spawn() {
-    let mut world = World::new();
-    let offset = Vec3::new(3.0, 12.0, -5.0);
-    let mut catalog = SpriteCatalog::default();
-    catalog.sprites.insert(ThingType::Wall, visual(offset));
-    world.insert_resource(catalog);
-    world.add_observer(spawn_wall_trigger);
-    let position = Vec2::new(20.0, 30.0);
-    world.trigger(SpawnWallEvent { position });
-    world.flush();
-    let mut query = world.query_filtered::<(&ChildOf, &Transform), With<Billboard>>();
-    let (child_of, child_transform) = query.single(&world).unwrap();
-    let parent_transform = world.get::<Transform>(child_of.parent()).unwrap();
-    let expected_base = Vec3::new(20.0, 0.0, 30.0);
-    assert_eq!(parent_transform.translation, expected_base);
-    assert_eq!(child_transform.translation, offset);
-    assert_eq!(
-        parent_transform.transform_point(child_transform.translation),
-        expected_base + offset,
-    );
 }

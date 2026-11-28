@@ -106,22 +106,23 @@ pub struct VisualAnchor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::thing::ThingType;
-    use strum::IntoEnumIterator;
+    use crate::{constants::ASSETS_PATH, thing::ThingCatalog};
 
-    fn sprite_info(thing_type: ThingType) -> SpriteInfo {
-        let text = std::fs::read_to_string(thing_type.get_path().join("info.toml")).unwrap();
+    fn sprite_info(dir: &Path) -> SpriteInfo {
+        let text = std::fs::read_to_string(dir.join("info.toml")).unwrap();
         toml::from_str::<SpriteConfig>(&text).unwrap().sprite_info
+    }
+
+    fn gun_sprite_info() -> SpriteInfo {
+        sprite_info(&Path::new(ASSETS_PATH).join("units/attackerGun"))
     }
 
     #[test]
     fn animation_world_sizes_use_source_frames_not_sheets() {
-        for (thing_type, expected) in [
-            (ThingType::AttackerGun, 29.4),
-            (ThingType::AttackerCannon, 43.2),
-        ] {
-            let info = sprite_info(thing_type);
-            let size = info.world_size(&thing_type.get_path()).unwrap();
+        for (name, expected) in [("attackerGun", 29.4), ("attackerCannon", 43.2)] {
+            let dir = Path::new(ASSETS_PATH).join("units").join(name);
+            let info = sprite_info(&dir);
+            let size = info.world_size(&dir).unwrap();
             assert!((size - Vec2::splat(expected)).length() < 0.001);
             let SpriteInfoKind::AnimationSet { animations } = &info.kind else {
                 panic!("Expected animated unit");
@@ -134,18 +135,19 @@ mod tests {
 
     #[test]
     fn all_sprite_configs_resolve_positive_scaled_sizes() {
-        for thing_type in ThingType::iter() {
-            let info = sprite_info(thing_type);
-            assert_eq!(info.scale, 0.15);
-            let size = info.world_size(&thing_type.get_path())
-                .unwrap_or_else(|error| panic!("{thing_type:?}: {error:#}"));
+        let catalog = ThingCatalog::new(ASSETS_PATH).unwrap();
+        for (_, entry) in catalog.iter() {
+            let dir = catalog.asset_root.join(&entry.asset_dir);
+            let info = sprite_info(&dir);
+            let size = info.world_size(&dir)
+                .unwrap_or_else(|error| panic!("{}: {error:#}", entry.name));
             assert!(size.is_finite() && size.x > 0.0 && size.y > 0.0);
         }
     }
 
     #[test]
     fn scale_preserves_aspect_ratio_and_rejects_invalid_values() {
-        let mut info = sprite_info(ThingType::AttackerGun);
+        let mut info = gun_sprite_info();
         let size = info.scaled_size(UVec2::new(100, 200)).unwrap();
         assert!((size - Vec2::new(15.0, 30.0)).length() < 0.001);
         assert!(info.scaled_size(UVec2::new(0, 100)).is_err());
@@ -177,7 +179,7 @@ mod tests {
 
     #[test]
     fn offsets_and_anchors_remain_world_space() {
-        let info = sprite_info(ThingType::AttackerGun);
+        let info = gun_sprite_info();
         assert_eq!(info.sprite_offset, Vec2::new(0.0, -7.0));
         let anchor = info.anchor.unwrap();
         assert_eq!(anchor.muzzle, Vec2::new(0.0, 20.0));

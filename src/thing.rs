@@ -151,25 +151,25 @@ mod tests {
 
     #[test]
     fn supply_storage_has_gameplay_and_sprite_configuration() {
-        let thing_type = ThingType::SupplyStorage;
-        let info = thing_type.get_info();
-        assert_eq!(info.t_type, thing_type);
-        assert!(!thing_type.is_unit());
+        let catalog = ThingCatalog::new(crate::constants::ASSETS_PATH).unwrap();
+        let name = "building:supplyStorage";
+        let id = ThingId::from_name(name);
+        let entry = &catalog.things[&id];
+        assert_eq!(entry.name, name);
+        let info = catalog.get_info(id).unwrap();
         assert!(info.unit_stats.is_none());
         assert!(info.battle_stats.is_none());
         assert_eq!(info.building_stats.unwrap().size, UVec2::splat(2));
 
-        let text = std::fs::read_to_string(thing_type.get_path().join("info.toml")).unwrap();
+        let dir = catalog.asset_root.join(&entry.asset_dir);
+        let text = fs::read_to_string(dir.join("info.toml")).unwrap();
         let config: SpriteConfig = toml::from_str(&text).unwrap();
         let SpriteInfoKind::Simple { file } = &config.sprite_info.kind else {
             panic!("SupplyStorage must use a simple sprite");
         };
-        assert_eq!(
-            thing_type.get_path().join(file).canonicalize().unwrap(),
-            PathBuf::from("assets/buildings/supplyStorage/supplyStorage.png").canonicalize().unwrap(),
-        );
+        assert_eq!(file, Path::new("sprite.png"));
         assert_eq!(config.sprite_info.scale, 0.15);
-        let size = config.sprite_info.world_size(&thing_type.get_path()).unwrap();
+        let size = config.sprite_info.world_size(&dir).unwrap();
         assert!((size - Vec2::splat(76.8)).length() < 0.001);
     }
 }

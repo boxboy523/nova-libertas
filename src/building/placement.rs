@@ -395,6 +395,8 @@ mod tests {
     use super::*;
     use chunk_flow_field::map::{Map, Side};
 
+    const SUPPLY_STORAGE: ThingId = ThingId::from_name("building:supplyStorage");
+
     fn flow() -> FlowGrid {
         FlowGrid { width: 8, height: 8, cell_size: 20.0, map: Map::new(&Obstacle::new(8, 8)) }
     }
@@ -409,7 +411,7 @@ mod tests {
         let mut team_materials = Assets::<TeamColorMaterial>::default();
         let material = team_materials.add(TeamColorMaterial::default());
         let mut sprites = SpriteCatalog::default();
-        sprites.sprites.insert(ThingType::SupplyStorage, UnitVisual {
+        sprites.sprites.insert(SUPPLY_STORAGE, UnitVisual {
             kind: UnitVisualKind::Simple {
                 mesh,
                 material: [(Team::Player, material)].into_iter().collect(),
@@ -426,7 +428,7 @@ mod tests {
             .insert_resource(team_materials)
             .insert_resource(Assets::<StandardMaterial>::default())
             .insert_resource(sprites)
-            .insert_resource(ThingCatalog::new())
+            .insert_resource(ThingCatalog::new(crate::constants::ASSETS_PATH).unwrap())
             .insert_resource(UiInputCapture::default())
             .insert_resource(ButtonInput::<MouseButton>::default())
             .insert_resource(ButtonInput::<KeyCode>::default())
@@ -461,7 +463,7 @@ mod tests {
         let mut cameras = world.query_filtered::<&mut Transform, With<Camera3d>>();
         *cameras.single_mut(world).unwrap() = Transform::from_xyz(150.0, 100.0, 150.0)
             .looking_at(Vec3::new(150.0, 0.0, 150.0), Vec3::NEG_Z);
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
@@ -506,10 +508,10 @@ mod tests {
         let mut baseline = test_app();
         let mut shifted = test_app();
         shifted.world_mut().resource_mut::<SpriteCatalog>().sprites
-            .get_mut(&ThingType::SupplyStorage).unwrap().model_offset = offset;
+            .get_mut(&SUPPLY_STORAGE).unwrap().model_offset = offset;
         for app in [&mut baseline, &mut shifted] {
             aim_at_map_center(app);
-            app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+            app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
             app.update();
         }
         let ghost_transform = |app: &mut App| {
@@ -576,7 +578,7 @@ mod tests {
     fn click_installs_configured_footprint_and_syncs_collision() {
         let mut app = test_app();
         aim_at_map_center(&mut app);
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
@@ -586,10 +588,10 @@ mod tests {
         assert!(entities_with::<Ghost>(&mut app).is_empty());
         assert!(entities_with::<CellOverlay>(&mut app).is_empty());
         let world = app.world_mut();
-        let mut buildings = world.query::<(&Building, &ThingType, &Position)>();
+        let mut buildings = world.query::<(&Building, &ThingId, &Position)>();
         let (building, kind, position) = buildings.single(world).unwrap();
         assert_eq!(building.size, UVec2::splat(2));
-        assert_eq!(*kind, ThingType::SupplyStorage);
+        assert_eq!(*kind, SUPPLY_STORAGE);
         assert!(position.0.distance(Vec2::splat(60.0)) < 0.01);
         let flow = world.resource::<FlowGrid>();
         let spatial = world.resource::<SpatialGrid>();
@@ -609,7 +611,7 @@ mod tests {
         let position = Vec2::new(81.0, 70.0);
         let entity = app.world_mut().spawn(Position(position)).id();
         app.world_mut().resource_mut::<SpatialGrid>().add_entity(entity, position, 3.0).unwrap();
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
@@ -630,7 +632,7 @@ mod tests {
         let position = Vec2::splat(82.0);
         let entity = app.world_mut().spawn(Position(position)).id();
         app.world_mut().resource_mut::<SpatialGrid>().add_entity(entity, position, 2.5).unwrap();
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.update();
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
         app.update();
@@ -644,7 +646,7 @@ mod tests {
         let mut app = test_app();
         aim_at_map_center(&mut app);
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().press(MouseButton::Left);
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.update();
         assert_eq!(app.world().resource::<FlowGrid>().map.get_generation(), 0);
         app.world_mut().resource_mut::<ButtonInput<MouseButton>>().reset_all();
@@ -660,7 +662,7 @@ mod tests {
     #[test]
     fn beginning_and_cancelling_cleans_preview_and_owns_release() {
         let mut app = test_app();
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.world_mut().flush();
         let root = entities_with::<PlacementSession>(&mut app)[0];
         assert!(app.world().get::<BlockWorldInput>(root).is_some());
@@ -686,7 +688,7 @@ mod tests {
     #[test]
     fn escape_releases_world_input_without_a_mouse_event() {
         let mut app = test_app();
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.world_mut().flush();
         let root = entities_with::<PlacementSession>(&mut app)[0];
         app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::Escape);
@@ -701,7 +703,7 @@ mod tests {
     fn click_checks_cells_at_the_current_cursor_position() {
         let mut app = test_app();
         aim_at_map_center(&mut app);
-        app.world_mut().trigger(BeginBuildingPlacement(ThingType::SupplyStorage));
+        app.world_mut().trigger(BeginBuildingPlacement(SUPPLY_STORAGE));
         app.update();
         let root = entities_with::<PlacementSession>(&mut app)[0];
         assert!(preview_cells(app.world(), root)

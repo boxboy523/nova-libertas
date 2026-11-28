@@ -253,6 +253,7 @@ fn oct_to_row(oct: u32) -> (u32, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::mesh::VertexAttributeValues;
 
     #[test]
     fn simple_sprite_offset_translates_vertices_without_scaling_or_uv_changes() {
@@ -281,15 +282,17 @@ mod tests {
     }
 
     #[test]
-    fn simple_sprite_zero_offset_preserves_center_alignment() {
+    fn simple_sprite_zero_offset_anchors_bottom_at_origin() {
         let mesh = create_simple_quad(Vec2::new(40.0, 60.0), Vec2::ZERO);
         let Some(VertexAttributeValues::Float32x3(positions)) =
             mesh.attribute(Mesh::ATTRIBUTE_POSITION)
         else { panic!("Expected position vertices") };
         for position in positions {
             assert_eq!(position[0].abs(), 20.0);
-            assert_eq!(position[1].abs(), 30.0);
             assert_eq!(position[2], 0.0);
         }
+        let ys = positions.iter().map(|position| position[1]);
+        assert_eq!(ys.clone().reduce(f32::min), Some(0.0));
+        assert_eq!(ys.reduce(f32::max), Some(60.0));
     }
 }
