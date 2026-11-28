@@ -21,3 +21,24 @@ kind = "instant"
 [battle_stats.impact]
 kind = "area"
 radius = 20.0
+
+[durability]
+max_hp = 1400.0
+armor = 2.0
+
+[unit_production]
+tier = 4
+ore_cost = 400
+oil_cost = 350
+population = 10
+production_time = 80.0
+
+[production_capability]
+tier = 2
+queue_capacity = 5
+parallel_capacity = 1
+
+[construction]
+ore_cost = 400
+oil_cost = 280
+construction_time = 45.0

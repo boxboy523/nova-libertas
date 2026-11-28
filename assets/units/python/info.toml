@@ -46,3 +46,14 @@ kind = "instant"
 
 [battle_stats.impact]
 kind = "single"
+
+[durability]
+max_hp = 500.0
+armor = 2.0
+
+[unit_production]
+tier = 3
+ore_cost = 125
+oil_cost = 50
+population = 2
+production_time = 40.0

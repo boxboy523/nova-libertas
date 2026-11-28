@@ -46,9 +46,19 @@ radius = 100.0
 size = 10.0
 max_speed = 100.0
 acceleration = 200.0
-max_hp = 100.0
 
 [battle_stats]
 range = 300.0
 damage = 10.0
 cooldown = 1.0
+
+[durability]
+max_hp = 100.0
+armor = 0.0
+
+[unit_production]
+tier = 1
+ore_cost = 80
+oil_cost = 15
+population = 1
+production_time = 20.0

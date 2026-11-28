@@ -48,3 +48,14 @@ id = "projectile:winged"
 
 [battle_stats.impact]
 kind = "single"
+
+[durability]
+max_hp = 250.0
+armor = 0.0
+
+[unit_production]
+tier = 2
+ore_cost = 90
+oil_cost = 60
+population = 2
+production_time = 30.0
