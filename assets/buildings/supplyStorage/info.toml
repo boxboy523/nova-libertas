@@ -1,3 +1,5 @@
+icon = "ui/icons/buildings/icon0Supply.png"
+
 [building_stats]
 size = [2, 2]
 

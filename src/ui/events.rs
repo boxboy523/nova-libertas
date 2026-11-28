@@ -289,7 +289,7 @@ fn spawn_building_grid(
         ));
     };
 
-    (0..3).for_each(|i| {
+    (0..4).for_each(|i| {
         spawn_slot(&player_state.building_loadout.core[i]);
         spawn_slot(&player_state.building_loadout.production[i]);
         spawn_slot(&player_state.building_loadout.research[i]);

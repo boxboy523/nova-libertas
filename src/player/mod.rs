@@ -45,9 +45,9 @@ pub fn player_state_init(mut state: ResMut<PlayerState>) {
     state.building_loadout = BuildingLoadout {
         core: [
             Some(ThingId::from_name("building:castle")),
-            None,
-            None,
-            None,
+            Some(ThingId::from_name("building:supplyStorage")),
+            Some(ThingId::from_name("building:transmitter")),
+            Some(ThingId::from_name("building:oilWell")),
         ],
         production: [
             Some(ThingId::from_name("building:buildAcademy")),
@@ -62,7 +62,7 @@ pub fn player_state_init(mut state: ResMut<PlayerState>) {
             None,
         ],
         defense: [
-            Some(ThingId::from_name("building:transmitter")),
+            None,
             None,
             None,
             None,
