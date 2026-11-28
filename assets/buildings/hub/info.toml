@@ -9,3 +9,12 @@ scale = 0.15
 file = "sprite.png"
 sprite_offset = [0.0, -15.0]
 model_offset = [0.0, 0.0, 15.0]
+
+[durability]
+max_hp = 1500.0
+armor = 0.0
+
+[construction]
+ore_cost = 240
+oil_cost = 150
+construction_time = 30.0

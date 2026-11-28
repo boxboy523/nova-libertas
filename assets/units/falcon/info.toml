@@ -49,3 +49,14 @@ id = "projectile:winged"
 [battle_stats.impact]
 kind = "area"
 radius = 15.0
+
+[durability]
+max_hp = 350.0
+armor = 0.0
+
+[unit_production]
+tier = 2
+ore_cost = 100
+oil_cost = 100
+population = 2
+production_time = 40.0
